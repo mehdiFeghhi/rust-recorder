@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: this workflow only needs to read the repository.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref so stale pushes do not burn minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Colored, non-interactive Cargo output makes CI failure logs easier to read.
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  quality:
+    name: Format, lint, test, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          # The job never pushes; do not leave the token in .git/config.
+          persist-credentials: false
+
+      # rust-toolchain.toml is the single source of truth for the compiler
+      # version. `rustup show` installs it (and its components) if missing.
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Do not cache a failed build: it hides the error on the next run.
+          cache-on-failure: false
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check compilation
+        run: cargo check --locked
+
+      - name: Lint with Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+  dependency-policy:
+    name: Dependency policy (cargo-deny)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Installs a prebuilt cargo-deny binary; no compilation in CI.
+      # The version is pinned so a future cargo-deny release cannot silently
+      # change how deny.toml is interpreted. Bump it deliberately.
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Check advisories, licenses, bans, and sources
+        run: cargo deny check
+
+  # Note: CI proves that the code compiles, is formatted, lint-clean, and
+  # passes its tests. It does NOT prove that X11 screen capture works on a real
+  # desktop; that requires a manual smoke test (see CONTRIBUTING.md).

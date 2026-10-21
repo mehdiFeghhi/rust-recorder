@@ -1,0 +1,12 @@
+[package]
+name = "rust-recorder"
+version = "0.1.0"
+edition = "2024"
+# Minimum supported Rust version (MSRV). Must match rust-toolchain.toml.
+rust-version = "1.91"
+description = "Desktop screen recorder for Linux (X11), built on FFmpeg"
+license = "MIT OR Apache-2.0"
+# This is an application, not a library: never publish it to crates.io.
+publish = false
+
+[dependencies]

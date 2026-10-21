@@ -1,0 +1,64 @@
+# Dependency policy, enforced by cargo-deny.
+#
+# Run locally:  cargo deny check
+# CI:          .github/workflows/ci.yml (dependency-policy job)
+# Documentation: CONTRIBUTING.md ("Dependency management")
+#
+# The allowlist below is a reviewed baseline, not a rubber stamp. When adding a
+# dependency whose license is not listed, read the license first and either add
+# it here deliberately or choose a different crate. Never add a license merely
+# to silence the check.
+
+[graph]
+# Only the target we actually ship in Phase 0. Target-specific dependencies
+# for other platforms are not part of our support surface yet.
+targets = ["x86_64-unknown-linux-gnu"]
+all-features = true
+
+[advisories]
+# Known vulnerabilities (RustSec advisories) always fail the build.
+# Soundness bugs are treated as errors too: undefined behaviour in a
+# dependency is not something we can audit away.
+unsound = "all"
+# Refuse yanked releases; they are withdrawn for a reason.
+yanked = "deny"
+# Only complain about unmaintained crates that we depend on directly.
+# Transitive crates are usually not ours to replace. Raise to "all" if you
+# want the strictest signal.
+unmaintained = "workspace"
+ignore = []
+
+[bans]
+# Two versions of the same crate increase binary size, compile time, and
+# upgrade risk. Resolve duplicates instead of ignoring them.
+multiple-versions = "deny"
+wildcards = "deny"
+deny = []
+skip = []
+
+[licenses]
+# Require high confidence when inferring a license from file text.
+confidence-threshold = 0.93
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+]
+# Per-crate exceptions go here, each with a comment explaining why.
+exceptions = []
+# With no dependencies yet, every allowance above is "unused" and the default
+# warning would fire on each one. Switch this back to "warn" (or remove the
+# line) when the first dependency lands; stale allowances are a policy smell.
+unused-allowed-license = "allow"
+
+[sources]
+# Only crates.io and git sources we explicitly trust. Unknown registries and
+# unknown git hosts fail the check.
+unknown-registry = "deny"
+unknown-git = "deny"

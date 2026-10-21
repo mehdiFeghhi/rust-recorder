@@ -1,0 +1,10 @@
+# Single source of truth for the Rust toolchain, used by both local
+# development and CI. `rustup` reads this file automatically and installs the
+# pinned toolchain (plus the components listed below) if it is missing.
+#
+# Keep `rust-version` in Cargo.toml in sync, and follow the upgrade procedure
+# in CONTRIBUTING.md ("Rust toolchain policy").
+[toolchain]
+channel = "1.91.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
