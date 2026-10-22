@@ -28,7 +28,7 @@ multi-monitor composition.
 ## Getting started
 
 ```bash
-git clone <repository-url>
+git clone git@github.com:mehdiFeghhi/rust-recorder.git
 cd rust-recorder
 rustup show            # installs the pinned toolchain and components
 cargo build
@@ -82,7 +82,7 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 - CI verifies formatting, compilation, lints, tests, and packaging. It cannot
   verify that screen capture works on a real desktop; that needs a manual
   smoke test (see CONTRIBUTING.md).
-- No released versions and no GitHub remote yet.
+- No released versions yet (v0.1.0 is planned after Phase 1).
 
 ## License
 

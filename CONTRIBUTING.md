@@ -13,7 +13,7 @@ maintainable, not to add ceremony.
 ## Local setup
 
 ```bash
-git clone <repository-url>
+git clone git@github.com:mehdiFeghhi/rust-recorder.git
 cd rust-recorder
 rustup show
 cargo build
@@ -146,8 +146,9 @@ While the project is pre-1.0 (`0.y.z`):
 - New feature, backwards compatible: bump `y`.
 - Bug fix: bump `z`.
 
-After 1.0.0, standard SemVer applies. Pre-releases use
-`vX.Y.Z-rc.1`-style tags.
+After 1.0.0, standard SemVer applies. Pre-release tags
+(`vX.Y.Z-rc.1`) are not handled by the current `Release` workflow; extend its
+tag pattern before creating one.
 
 ## Release procedure
 
@@ -173,7 +174,9 @@ Do not upload binaries by hand; the workflow is the only release path.
 
 ## GitHub repository setup (one-time)
 
-The repository has no remote yet. Once one exists:
+Branch protection and required checks are configured in the GitHub UI
+(Settings → Rules). Until that is done, nothing prevents direct pushes to
+`main`.
 
 - Enable **branch protection** on `main`: require a pull request, require the
   `CI` status checks, require linear history, disallow force pushes.

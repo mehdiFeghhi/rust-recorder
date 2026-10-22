@@ -17,7 +17,8 @@ No versions have been released yet. Once releases exist, only the latest
 - Preferred: use GitHub's [private vulnerability reporting][gh-pvr]
   (Security tab → "Report a vulnerability"). This keeps the report private
   until a fix is available.
-- If the repository is not yet on GitHub, contact the maintainer directly.
+- Or open the advisory form directly:
+  https://github.com/mehdiFeghhi/rust-recorder/security/advisories/new
 
 Include:
 
