@@ -6,6 +6,7 @@
 use std::ffi::OsString;
 use std::process::ExitCode;
 
+mod command;
 mod config;
 
 use config::{Config, ConfigError, ParseResult};
@@ -27,8 +28,10 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), ConfigError> {
             Ok(())
         }
         ParseResult::Run(config) => {
-            // Temporary checkpoint: milestone 3 replaces this with recording.
-            println!("{config}");
+            // Milestone 2 checkpoint: print the command that milestone 3 will
+            // spawn. It is never passed through a shell.
+            let cmd = command::build(&config)?;
+            println!("{cmd:?}");
             Ok(())
         }
     }

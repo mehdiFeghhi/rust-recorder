@@ -9,7 +9,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Frame rate used when `--fps` is omitted.
 pub const DEFAULT_FPS: u32 = 30;
@@ -27,6 +27,36 @@ pub struct Config {
     pub fps: u32,
     pub duration: Option<u64>,
     pub display: String,
+}
+
+/// Output container selected from the validated output extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Container {
+    Mp4,
+    Matroska,
+}
+
+impl Container {
+    /// Map an output path's extension to a container.
+    ///
+    /// Validation and command construction both go through this function, so
+    /// the accepted extensions are defined in exactly one place.
+    pub fn from_path(path: &Path) -> Result<Self, ConfigError> {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some(ext) if ext.eq_ignore_ascii_case("mp4") => Ok(Self::Mp4),
+            Some(ext) if ext.eq_ignore_ascii_case("mkv") => Ok(Self::Matroska),
+            Some(ext) => Err(ConfigError::UnsupportedExtension(ext.to_owned())),
+            None => Err(ConfigError::MissingExtension),
+        }
+    }
+
+    /// The `-f` value FFmpeg expects for this container.
+    pub fn ffmpeg_format(self) -> &'static str {
+        match self {
+            Self::Mp4 => "mp4",
+            Self::Matroska => "matroska",
+        }
+    }
 }
 
 /// Outcome of parsing the command line.
@@ -161,11 +191,7 @@ impl Config {
             return Err(ConfigError::EmptyOutput);
         }
 
-        match self.output.extension().and_then(|ext| ext.to_str()) {
-            Some(ext) if ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("mkv") => {}
-            Some(ext) => return Err(ConfigError::UnsupportedExtension(ext.to_owned())),
-            None => return Err(ConfigError::MissingExtension),
-        }
+        Container::from_path(&self.output)?;
 
         // A relative file name such as `out.mp4` has an empty parent; that
         // means the current directory and needs no further checks.
