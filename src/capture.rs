@@ -7,12 +7,16 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::monitor::Monitor;
+
 /// The area to capture.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Capture {
     /// The whole display, sized by FFmpeg's `x11grab` default.
     #[default]
     FullScreen,
+    /// One monitor, resolved to its geometry before recording starts.
+    Monitor(u32),
     /// An explicit rectangle in X11 root coordinates.
     Region(Region),
 }
@@ -66,6 +70,23 @@ impl Region {
     }
 }
 
+/// Resolve a monitor index to its rectangle.
+pub fn select(index: u32, monitors: &[Monitor]) -> Result<Region, CaptureError> {
+    let monitor = monitors
+        .get(index as usize)
+        .ok_or(CaptureError::MonitorOutOfRange {
+            index,
+            available: monitors.len(),
+        })?;
+
+    Ok(Region {
+        width: monitor.width,
+        height: monitor.height,
+        x: monitor.x,
+        y: monitor.y,
+    })
+}
+
 /// Why a capture region could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaptureError {
@@ -75,6 +96,13 @@ pub enum CaptureError {
     ZeroDimension,
     /// The origin is negative; X11 root coordinates start at 0,0.
     NegativeOrigin,
+    /// The requested monitor index does not exist.
+    MonitorOutOfRange { index: u32, available: usize },
+}
+
+impl CaptureError {
+    /// Exit code for capture-selection problems (see README).
+    pub const EXIT_CODE: u8 = 2;
 }
 
 impl fmt::Display for CaptureError {
@@ -88,6 +116,10 @@ impl fmt::Display for CaptureError {
             Self::NegativeOrigin => {
                 write!(f, "region origin must not be negative")
             }
+            Self::MonitorOutOfRange { index, available } => write!(
+                f,
+                "monitor {index} does not exist; {available} connected monitor(s) found"
+            ),
         }
     }
 }
@@ -97,6 +129,45 @@ impl Error for CaptureError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn monitor(width: u32, height: u32, x: i32, y: i32) -> Monitor {
+        Monitor {
+            name: "eDP-1".to_owned(),
+            width,
+            height,
+            x,
+            y,
+            primary: true,
+        }
+    }
+
+    #[test]
+    fn selects_a_monitor_rectangle() {
+        let monitors = [monitor(1920, 1200, 0, 0), monitor(2560, 1440, 1920, 0)];
+
+        assert_eq!(
+            select(1, &monitors).expect("second monitor"),
+            Region {
+                width: 2560,
+                height: 1440,
+                x: 1920,
+                y: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_an_unknown_monitor() {
+        let monitors = [monitor(1920, 1200, 0, 0)];
+
+        assert_eq!(
+            select(3, &monitors).unwrap_err(),
+            CaptureError::MonitorOutOfRange {
+                index: 3,
+                available: 1,
+            }
+        );
+    }
 
     #[test]
     fn parses_a_region() {

@@ -51,6 +51,9 @@ rust-recorder --output /tmp/demo.mp4 --duration 10
 # List connected monitors
 rust-recorder --list-monitors
 
+# Record the first monitor
+rust-recorder --monitor 0 --output /tmp/monitor.mp4
+
 # Record a 640x480 rectangle at 100,80
 rust-recorder --region 640x480+100+80 --output /tmp/region.mp4
 
