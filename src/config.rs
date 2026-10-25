@@ -67,6 +67,7 @@ impl Container {
 pub enum ParseResult {
     Help,
     Version,
+    ListMonitors,
     Run(Config),
 }
 
@@ -140,6 +141,7 @@ impl Config {
                         Capture::Region(Region::parse(text).map_err(ConfigError::InvalidRegion)?);
                 }
                 "-V" | "--version" => return Ok(ParseResult::Version),
+                "--list-monitors" => return Ok(ParseResult::ListMonitors),
                 "-o" | "--output" => {
                     output = Some(PathBuf::from(next_value(&mut args, "--output")?));
                 }
@@ -339,6 +341,7 @@ mod tests {
             ParseResult::Run(config) => config,
             ParseResult::Help => panic!("expected a configuration, got help"),
             ParseResult::Version => panic!("expected a configuration, got version"),
+            ParseResult::ListMonitors => panic!("expected a configuration, got monitor list"),
         }
     }
 
@@ -349,6 +352,14 @@ mod tests {
             ParseResult::Help
         );
         assert_eq!(parse(&["-h"]).unwrap(), ParseResult::Help);
+    }
+
+    #[test]
+    fn list_monitors_is_recognized() {
+        assert_eq!(
+            parse(&["--list-monitors"]).unwrap(),
+            ParseResult::ListMonitors
+        );
     }
 
     #[test]
