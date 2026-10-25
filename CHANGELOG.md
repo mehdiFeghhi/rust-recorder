@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Region bounds validation: an explicit `--region` must fit within the
+  connected desktop; out-of-bounds rectangles are rejected before FFmpeg runs.
 - Monitor selection: `--monitor N` records one monitor from
   `--list-monitors`, translating its geometry into a capture region.
 - Monitor discovery: `--list-monitors` reports connected outputs, their

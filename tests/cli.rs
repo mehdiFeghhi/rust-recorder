@@ -197,6 +197,52 @@ fn unknown_monitor_is_rejected() {
 }
 
 #[test]
+fn region_outside_the_desktop_is_rejected() {
+    let dir = TempDir::new("region-bounds");
+    write_script(dir.path(), "xrandr", XRANDR_OUTPUT);
+    let output_path = dir.join("out.mp4");
+
+    let output = run(
+        dir.path(),
+        &[
+            "--region",
+            "3000x3000+0+0",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(2), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("does not fit"));
+}
+
+#[test]
+fn region_inside_the_desktop_is_recorded() {
+    let dir = TempDir::new("region-ok");
+    write_script(dir.path(), "xrandr", XRANDR_OUTPUT);
+    write_script(dir.path(), "ffmpeg", FFMPEG_WRITES_FILE);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--region",
+            "640x480+100+80",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("recording finished"));
+}
+
+#[test]
 fn configuration_errors_exit_with_two() {
     let dir = TempDir::new("config");
     let output = run(dir.path(), &[]);

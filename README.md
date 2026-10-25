@@ -25,6 +25,7 @@ multi-monitor composition.
 | Rust | 1.91.0 (pinned) | Installed automatically by `rustup` from `rust-toolchain.toml` |
 | FFmpeg | 4.4.2 (system) | Required at runtime for recording and probing (`ffprobe`) |
 | Linux | x86_64, X11 | Only supported target |
+| xrandr | system utility | Monitor discovery and region bounds validation |
 
 ## Getting started
 
@@ -111,6 +112,8 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 - Verification checks that the file is non-empty and that `ffprobe` can read
   a video stream with a positive duration. Frame-level integrity and playback
   in a specific player are not verified.
+- Explicit regions are validated against the desktop rectangle before capture;
+  monitor-derived regions are in bounds by construction.
 - No audio capture yet.
 - Linux/X11 only. Wayland is unsupported and untested.
 - CI verifies formatting, compilation, lints, tests, and packaging. It cannot

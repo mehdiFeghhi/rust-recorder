@@ -56,11 +56,18 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             Ok(())
         }
         ParseResult::Run(mut config) => {
-            // Monitor indices are resolved against the live display list
-            // before the command is built.
-            if let Capture::Monitor(index) = config.capture {
-                let monitors = monitor::discover()?;
-                config.capture = Capture::Region(capture::select(index, &monitors)?);
+            // Monitor indices and explicit regions are resolved against the
+            // live display list before the command is built.
+            match config.capture {
+                Capture::Monitor(index) => {
+                    let monitors = monitor::discover()?;
+                    config.capture = Capture::Region(capture::select(index, &monitors)?);
+                }
+                Capture::Region(region) => {
+                    let monitors = monitor::discover()?;
+                    capture::validate_region(region, &monitors)?;
+                }
+                Capture::FullScreen => {}
             }
 
             let session_id = format!(
