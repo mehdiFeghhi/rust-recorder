@@ -105,7 +105,8 @@ Requirements:
   output has been checked appropriately.
 - Keep process management separate from CLI parsing where useful.
 - M3.1 adds synchronous execution and exit-status reporting; M3.2 adds
-  Ctrl-C handling and graceful shutdown.
+  Ctrl-C handling and graceful shutdown; M3.3 verifies that the output file is
+  a non-empty regular file after a successful exit.
 
 Audio capture and GUI development remain out of scope unless separately
 approved.
