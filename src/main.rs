@@ -10,10 +10,12 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+mod capture;
 mod command;
 mod config;
 mod error;
 mod logging;
+mod monitor;
 mod output;
 mod probe;
 mod process;
@@ -41,6 +43,15 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
         }
         ParseResult::Version => {
             println!("rust-recorder {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        ParseResult::ListMonitors => {
+            let monitors = monitor::discover()?;
+            if monitors.is_empty() {
+                eprintln!("No connected monitors found.");
+            } else {
+                print!("{}", monitor::render(&monitors));
+            }
             Ok(())
         }
         ParseResult::Run(config) => {
@@ -111,6 +122,8 @@ OPTIONS:
         --fps <N>              Frames per second (1-144) [default: 30]
         --duration <SECONDS>   Stop after N seconds (1-86400); omit to record until Ctrl-C
         --display <:N>         X11 display [default: $DISPLAY]
+        --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
+        --list-monitors        List connected monitors and exit
     -h, --help                 Print this help
     -V, --version              Print version
 

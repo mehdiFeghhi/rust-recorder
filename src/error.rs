@@ -8,6 +8,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::config::ConfigError;
+use crate::monitor::MonitorError;
 use crate::output::OutputError;
 use crate::probe::ProbeError;
 use crate::process::ProcessError;
@@ -19,6 +20,7 @@ pub enum AppError {
     Process(ProcessError),
     Output(OutputError),
     Probe(ProbeError),
+    Monitor(MonitorError),
 }
 
 impl AppError {
@@ -29,6 +31,7 @@ impl AppError {
             Self::Process(_) => ProcessError::EXIT_CODE,
             Self::Output(_) => OutputError::EXIT_CODE,
             Self::Probe(_) => ProbeError::EXIT_CODE,
+            Self::Monitor(_) => MonitorError::EXIT_CODE,
         }
     }
 }
@@ -57,6 +60,12 @@ impl From<ProbeError> for AppError {
     }
 }
 
+impl From<MonitorError> for AppError {
+    fn from(error: MonitorError) -> Self {
+        Self::Monitor(error)
+    }
+}
+
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -64,6 +73,7 @@ impl fmt::Display for AppError {
             Self::Process(error) => write!(f, "{error}"),
             Self::Output(error) => write!(f, "{error}"),
             Self::Probe(error) => write!(f, "{error}"),
+            Self::Monitor(error) => write!(f, "{error}"),
         }
     }
 }
@@ -75,6 +85,7 @@ impl Error for AppError {
             Self::Process(error) => Some(error as &(dyn Error + 'static)),
             Self::Output(error) => Some(error as &(dyn Error + 'static)),
             Self::Probe(error) => Some(error as &(dyn Error + 'static)),
+            Self::Monitor(error) => Some(error as &(dyn Error + 'static)),
         }
     }
 }
@@ -96,6 +107,14 @@ mod tests {
     fn process_errors_exit_with_one() {
         let error = AppError::from(ProcessError::ShutdownTimeout {
             grace: Duration::from_secs(1),
+        });
+        assert_eq!(error.exit_code(), 1);
+    }
+
+    #[test]
+    fn monitor_errors_exit_with_one() {
+        let error = AppError::from(MonitorError::Spawn {
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "no xrandr"),
         });
         assert_eq!(error.exit_code(), 1);
     }

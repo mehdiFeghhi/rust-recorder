@@ -8,6 +8,7 @@
 
 use std::process::Command;
 
+use crate::capture::Capture;
 use crate::config::{Config, ConfigError, Container};
 
 /// Executable name, resolved through `PATH`.
@@ -28,15 +29,33 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         .arg("-hide_banner")
         .arg("-loglevel")
         .arg("error")
-        .arg("-nostats")
-        // Input: the whole X11 display. Omitting -video_size makes x11grab
-        // capture the full screen.
-        .arg("-f")
-        .arg("x11grab")
-        .arg("-framerate")
-        .arg(config.fps.to_string())
-        .arg("-i")
-        .arg(&config.display)
+        .arg("-nostats");
+
+    match &config.capture {
+        // Omitting -video_size makes x11grab capture the whole screen.
+        Capture::FullScreen => {
+            command
+                .arg("-f")
+                .arg("x11grab")
+                .arg("-framerate")
+                .arg(config.fps.to_string())
+                .arg("-i")
+                .arg(&config.display);
+        }
+        Capture::Region(region) => {
+            command
+                .arg("-f")
+                .arg("x11grab")
+                .arg("-video_size")
+                .arg(region.video_size())
+                .arg("-framerate")
+                .arg(config.fps.to_string())
+                .arg("-i")
+                .arg(format!("{}{}", config.display, region.offset()));
+        }
+    }
+
+    command
         // Output: H.264 that plays everywhere, in the selected container.
         .arg("-c:v")
         .arg("libx264")
@@ -70,6 +89,7 @@ mod tests {
             fps: 30,
             duration: None,
             display: ":1".to_owned(),
+            capture: Capture::FullScreen,
         }
     }
 
@@ -153,6 +173,30 @@ mod tests {
     fn extension_matching_is_case_insensitive() {
         let args = args(&command_for(&config("clip.MP4")));
         assert_has_pair(&args, "-f", "mp4");
+    }
+
+    #[test]
+    fn region_adds_video_size_and_offset() {
+        use crate::capture::Region;
+
+        let mut cfg = config("clip.mp4");
+        cfg.capture = Capture::Region(Region {
+            width: 640,
+            height: 480,
+            x: 100,
+            y: 80,
+        });
+        let args = args(&command_for(&cfg));
+
+        assert_has_pair(&args, "-video_size", "640x480");
+        assert_has_pair(&args, "-i", ":1+100,80");
+    }
+
+    #[test]
+    fn full_screen_has_no_video_size() {
+        let args = args(&command_for(&config("clip.mp4")));
+        assert!(!args.iter().any(|arg| arg == "-video_size"));
+        assert_has_pair(&args, "-i", ":1");
     }
 
     #[test]

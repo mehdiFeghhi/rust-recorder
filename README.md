@@ -48,6 +48,12 @@ FFmpeg process detail. A missing `ffmpeg` binary, an unreachable
 # Record the whole display for 10 seconds
 rust-recorder --output /tmp/demo.mp4 --duration 10
 
+# List connected monitors
+rust-recorder --list-monitors
+
+# Record a 640x480 rectangle at 100,80
+rust-recorder --region 640x480+100+80 --output /tmp/region.mp4
+
 # Record until Ctrl-C
 rust-recorder --output /tmp/demo.mp4
 

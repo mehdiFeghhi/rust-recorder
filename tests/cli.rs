@@ -52,6 +52,13 @@ echo 'probe-boom' >&2
 exit 1
 "#;
 
+const XRANDR_OUTPUT: &str = r#"#!/bin/sh
+printf '%s\n' \
+ 'Screen 0: minimum 320 x 200, current 1920 x 1200, maximum 16384 x 16384' \
+ 'eDP-1 connected primary 1920x1200+0+0 (normal left inverted right x axis y axis) 344mm x 215mm' \
+ 'DP-1 disconnected (normal left inverted right x axis y axis)'
+"#;
+
 struct TempDir {
     path: PathBuf,
 }
@@ -105,6 +112,33 @@ fn run(dir: &Path, args: &[&str]) -> Output {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[test]
+fn lists_connected_monitors() {
+    let dir = TempDir::new("monitors");
+    write_script(dir.path(), "xrandr", XRANDR_OUTPUT);
+
+    let output = run(dir.path(), &["--list-monitors"]);
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("eDP-1"), "stdout: {stdout}");
+    assert!(stdout.contains("Resolution: 1920x1200"), "stdout: {stdout}");
+    assert!(stdout.contains("Primary: yes"), "stdout: {stdout}");
+    assert!(
+        !stdout.contains("[1]"),
+        "disconnected outputs must be hidden: {stdout}"
+    );
+}
+
+#[test]
+fn missing_xrandr_is_reported() {
+    let dir = TempDir::new("no-xrandr");
+    let output = run(dir.path(), &["--list-monitors"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("could not start xrandr"));
 }
 
 #[test]
