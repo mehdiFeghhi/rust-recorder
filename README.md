@@ -55,6 +55,9 @@ rust-recorder --list-monitors
 # Record the first monitor
 rust-recorder --monitor 0 --output /tmp/monitor.mp4
 
+# Pick a region with the mouse, then record
+rust-recorder --select-region --output /tmp/selection.mp4
+
 # Record a 640x480 rectangle at 100,80
 rust-recorder --region 640x480+100+80 --output /tmp/region.mp4
 

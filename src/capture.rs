@@ -19,6 +19,8 @@ pub enum Capture {
     Monitor(u32),
     /// An explicit rectangle in X11 root coordinates.
     Region(Region),
+    /// Let FFmpeg's `x11grab` pick the rectangle with the mouse.
+    SelectRegion,
 }
 
 /// A rectangle in X11 root coordinates.

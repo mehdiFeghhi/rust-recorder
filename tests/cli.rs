@@ -243,6 +243,36 @@ fn region_inside_the_desktop_is_recorded() {
 }
 
 #[test]
+fn interactive_selection_passes_the_flag() {
+    let dir = TempDir::new("select-region");
+    let args_file = dir.join("ffmpeg-args.txt");
+    let fake_ffmpeg = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nlast=\"\"\nfor argument in \"$@\"; do last=\"$argument\"; done\nprintf 'payload' > \"$last\"\nexit 0\n",
+        args_file.display()
+    );
+    write_script(dir.path(), "ffmpeg", &fake_ffmpeg);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--select-region",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+
+    let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
+    assert!(argv.contains("-select_region\n1\n"), "argv: {argv}");
+    assert!(!argv.contains("-video_size"), "argv: {argv}");
+}
+
+#[test]
 fn configuration_errors_exit_with_two() {
     let dir = TempDir::new("config");
     let output = run(dir.path(), &[]);

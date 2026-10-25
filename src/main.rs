@@ -67,7 +67,8 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
                     let monitors = monitor::discover()?;
                     capture::validate_region(region, &monitors)?;
                 }
-                Capture::FullScreen => {}
+                // FFmpeg owns the interactive selection; nothing to resolve.
+                Capture::SelectRegion | Capture::FullScreen => {}
             }
 
             let session_id = format!(
@@ -140,6 +141,7 @@ OPTIONS:
         --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
         --list-monitors        List connected monitors and exit
         --monitor <N>          Capture the Nth monitor from --list-monitors
+        --select-region        Select the region with the mouse, then record
     -h, --help                 Print this help
     -V, --version              Print version
 
