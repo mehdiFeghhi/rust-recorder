@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- `--version` / `-V` flag.
 - Command-line recording: `rust-recorder --output <PATH> [--fps N]
   [--duration SECONDS]` builds an FFmpeg `x11grab`/`libx264` command and reports
   its exit status.

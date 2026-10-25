@@ -172,7 +172,9 @@ tag pattern before creating one.
 5. The `Release` workflow verifies the tag against `Cargo.toml`, runs tests,
    builds the binary, produces a `.tar.gz` plus `.sha256`, and publishes the
    GitHub Release.
-6. Verify the release assets and checksums on the Releases page.
+6. Verify the release on the Releases page: `sha256sum -c <file>.sha256`
+   passes and the extracted binary reports the released version with
+   `rust-recorder --version`.
 
 Do not upload binaries by hand; the workflow is the only release path.
 
