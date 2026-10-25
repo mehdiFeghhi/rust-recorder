@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 - Structured diagnostics with `tracing`: a session span plus start, finish,
   interrupt, exit, and shutdown-timeout events, filtered by `RUST_LOG` and
   written to stderr.
+- `ffprobe` verification: the recording must contain a readable video stream
+  and a positive duration before success is reported.
 - Engineering foundation: pinned Rust toolchain, CI quality gates
   (format, check, Clippy, tests, release build), dependency policy enforced by
   `cargo-deny`, weekly Dependabot updates, and a tag-driven release workflow

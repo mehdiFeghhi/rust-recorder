@@ -15,6 +15,7 @@ mod config;
 mod error;
 mod logging;
 mod output;
+mod probe;
 mod process;
 
 use config::{Config, ParseResult};
@@ -46,7 +47,10 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |elapsed| elapsed.as_secs())
             );
-            let span = tracing::info_span!(
+            // A WARN-level span stays enabled at the default `warn` filter, so
+            // warnings and errors keep the session context; an INFO span would
+            // be disabled and its fields lost.
+            let span = tracing::warn_span!(
                 "session",
                 session_id = %session_id,
                 output = %config.output.display(),
@@ -67,17 +71,22 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             // Only reached after FFmpeg exits successfully; the file is then
             // checked so a silent no-output run is not reported as success.
             let output = output::verify(&config.output)?;
+            let probe = probe::inspect(&config.output)?;
 
             tracing::info!(
                 elapsed_ms = started.elapsed().as_millis() as u64,
                 size = output.size,
+                codec = %probe.codec,
+                duration_s = probe.duration,
                 "recording finished"
             );
 
             eprintln!(
-                "recording finished: {} ({} bytes)",
+                "recording finished: {} ({} bytes, {:.2} s, {})",
                 config.output.display(),
-                output.size
+                output.size,
+                probe.duration,
+                probe.codec
             );
             Ok(())
         }

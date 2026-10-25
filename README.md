@@ -4,9 +4,9 @@ A desktop screen recorder for Linux, built in Rust on top of FFmpeg.
 
 > **Status: Phase 1 — command-line prototype (in progress).**
 > The CLI validates arguments, builds an FFmpeg `x11grab` command, runs it to
-> completion, finalizes the file gracefully on Ctrl-C, and checks that the
-> output is a non-empty file. Codec/duration probing and audio are not
-> implemented yet.
+> completion, finalizes the file gracefully on Ctrl-C, verifies the file, and
+> probes it with `ffprobe` for a video stream and a positive duration. Audio is
+> not implemented yet.
 
 ## Scope
 
@@ -23,7 +23,7 @@ multi-monitor composition.
 | Dependency | Version | Notes |
 | --- | --- | --- |
 | Rust | 1.91.0 (pinned) | Installed automatically by `rustup` from `rust-toolchain.toml` |
-| FFmpeg | 4.4.2 (system) | Required at runtime for recording |
+| FFmpeg | 4.4.2 (system) | Required at runtime for recording and probing (`ffprobe`) |
 | Linux | x86_64, X11 | Only supported target |
 
 ## Getting started
@@ -84,9 +84,9 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 
 - Ctrl-C asks FFmpeg to finalize (`q` on stdin) and waits up to 10 seconds
   before killing it. A second Ctrl-C does not shorten that wait.
-- Output verification is a sanity check only: the file must exist, be a
-  regular file, and be non-empty. Codec, duration, and playability are not
-  probed.
+- Verification checks that the file is non-empty and that `ffprobe` can read
+  a video stream with a positive duration. Frame-level integrity and playback
+  in a specific player are not verified.
 - No audio capture yet.
 - Linux/X11 only. Wayland is unsupported and untested.
 - CI verifies formatting, compilation, lints, tests, and packaging. It cannot

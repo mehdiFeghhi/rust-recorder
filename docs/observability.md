@@ -64,13 +64,16 @@ stable once implemented; add fields rather than renaming them.
 | `recording.start` | INFO | `output`, `display`, `fps`, `duration_limit` |
 | `recording.stop` | INFO | `duration_ms`, `reason` (user, duration, signal) |
 | `recording.finalize` | INFO | `success`, `duration_ms`, `output_size_bytes` |
+| `output.probed` | INFO | `codec`, `duration_s` |
 | `ffmpeg.spawn_failed` | ERROR | `error`, `program` |
 | `ffmpeg.exit` | INFO / ERROR | `exit_code`, `signal`, `stderr_tail` |
 | `capture.interrupted` | WARN | `signal` |
 | `config.invalid` | ERROR | `field`, `reason` |
 
-Spans: one span per recording session, carrying `session.id`, so every event
-outside the session loop is attributable.
+Spans: one span per recording session, carrying `session_id`, so every event
+outside the session loop is attributable. The span is created at `WARN`
+level so it stays enabled at the default filter — a `tracing` filtering
+detail, not a severity claim.
 
 ## Sensitive data rules
 
