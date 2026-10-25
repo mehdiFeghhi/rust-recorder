@@ -1,37 +1,90 @@
 //! `rust-recorder` entry point.
 //!
-//! Milestone 1 covers argument parsing and validation only. It prints the
-//! effective configuration and exits; FFmpeg is introduced in milestone 3.
+//! Flow: parse and validate the command line into a [`Config`], build the
+//! FFmpeg invocation with [`command::build`], then execute it to completion
+//! with [`process::run`]. Exit code 2 means a usage/configuration error; exit
+//! code 1 means FFmpeg could not be started or exited unsuccessfully.
 
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt;
 use std::process::ExitCode;
 
 mod command;
 mod config;
+mod process;
 
 use config::{Config, ConfigError, ParseResult};
+use process::ProcessError;
+
+/// Top-level failure, keeping configuration and process errors distinct so
+/// each can map to its own exit code.
+#[derive(Debug)]
+enum AppError {
+    Config(ConfigError),
+    Process(ProcessError),
+}
+
+impl AppError {
+    fn exit_code(&self) -> u8 {
+        match self {
+            Self::Config(_) => ConfigError::EXIT_CODE,
+            Self::Process(_) => ProcessError::EXIT_CODE,
+        }
+    }
+}
+
+impl From<ConfigError> for AppError {
+    fn from(error: ConfigError) -> Self {
+        Self::Config(error)
+    }
+}
+
+impl From<ProcessError> for AppError {
+    fn from(error: ProcessError) -> Self {
+        Self::Process(error)
+    }
+}
+
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(error) => write!(f, "{error}"),
+            Self::Process(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl Error for AppError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Config(error) => Some(error as &(dyn Error + 'static)),
+            Self::Process(error) => Some(error as &(dyn Error + 'static)),
+        }
+    }
+}
 
 fn main() -> ExitCode {
     match run(std::env::args_os().skip(1)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
-            ExitCode::from(ConfigError::EXIT_CODE)
+            ExitCode::from(error.exit_code())
         }
     }
 }
 
-fn run(args: impl Iterator<Item = OsString>) -> Result<(), ConfigError> {
+fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
     match Config::parse(args)? {
         ParseResult::Help => {
             print_help();
             Ok(())
         }
         ParseResult::Run(config) => {
-            // Milestone 2 checkpoint: print the command that milestone 3 will
-            // spawn. It is never passed through a shell.
-            let cmd = command::build(&config)?;
-            println!("{cmd:?}");
+            let mut cmd = command::build(&config)?;
+            process::run(&mut cmd)?;
+            // Only reached after FFmpeg exits successfully.
+            eprintln!("recording finished: {}", config.output.display());
             Ok(())
         }
     }

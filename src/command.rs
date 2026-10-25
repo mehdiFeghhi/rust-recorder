@@ -1,8 +1,10 @@
 //! Construction of the FFmpeg command line.
 //!
-//! This module is deliberately pure: it builds a [`std::process::Command`] but
-//! never spawns it. Every argument is passed as its own OS string, so no shell
-//! parses the values; a path containing spaces or `;` stays one argument.
+//! This module only *describes* the process: it builds a
+//! [`std::process::Command`] and never spawns it. Execution lives in
+//! [`crate::process::run`]. Every argument is passed as its own OS string, so
+//! no shell parses the values; a path containing spaces or `;` stays one
+//! argument.
 
 use std::process::Command;
 
@@ -17,7 +19,7 @@ pub const X264_PRESET: &str = "veryfast";
 
 /// Build the FFmpeg invocation for `config`.
 ///
-/// This only describes the process. Nothing is spawned until milestone 3.
+/// This only describes the process; [`crate::process::run`] executes it.
 pub fn build(config: &Config) -> Result<Command, ConfigError> {
     let container = Container::from_path(&config.output)?;
 

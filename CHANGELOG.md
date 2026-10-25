@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Command-line recording: `rust-recorder --output <PATH> [--fps N]
+  [--duration SECONDS]` builds an FFmpeg `x11grab`/`libx264` command and reports
+  its exit status.
 - Engineering foundation: pinned Rust toolchain, CI quality gates
   (format, check, Clippy, tests, release build), dependency policy enforced by
   `cargo-deny`, weekly Dependabot updates, and a tag-driven release workflow

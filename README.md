@@ -2,10 +2,10 @@
 
 A desktop screen recorder for Linux, built in Rust on top of FFmpeg.
 
-> **Status: Phase 0 — engineering foundation.**
-> The application does not record anything yet. This phase establishes the
-> toolchain, CI, dependency policy, release process, and documentation that
-> application work will build on.
+> **Status: Phase 1 — command-line prototype (in progress).**
+> The CLI validates arguments, builds an FFmpeg `x11grab` command, and runs it
+> to completion. Graceful interruption and output verification are not
+> implemented yet.
 
 ## Scope
 
@@ -22,8 +22,8 @@ multi-monitor composition.
 | Dependency | Version | Notes |
 | --- | --- | --- |
 | Rust | 1.91.0 (pinned) | Installed automatically by `rustup` from `rust-toolchain.toml` |
-| FFmpeg | 4.4.2 (system) | Runtime dependency; not needed until recording lands |
-| Linux | x86_64, X11 | Only supported target in Phase 0 |
+| FFmpeg | 4.4.2 (system) | Required at runtime for recording |
+| Linux | x86_64, X11 | Only supported target |
 
 ## Getting started
 
@@ -32,10 +32,12 @@ git clone git@github.com:mehdiFeghhi/rust-recorder.git
 cd rust-recorder
 rustup show            # installs the pinned toolchain and components
 cargo build
-cargo run
+cargo run -- --output /tmp/demo.mp4 --duration 5
 ```
 
-Expected output for now: `Hello, world!`
+FFmpeg records the display for the requested duration and writes the file; the
+process exit status is reported. A missing `ffmpeg` binary, an unreachable
+`DISPLAY`, or an FFmpeg failure produces a nonzero exit status.
 
 ## Quality gates
 
@@ -77,7 +79,9 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 
 ## Known limitations
 
-- Nothing is implemented yet: no recording, no CLI, no audio.
+- Recording runs FFmpeg synchronously; Ctrl-C is not handled by the
+  application yet, so there is no graceful shutdown and no post-exit output
+  verification. No audio capture yet.
 - Linux/X11 only. Wayland is unsupported and untested.
 - CI verifies formatting, compilation, lints, tests, and packaging. It cannot
   verify that screen capture works on a real desktop; that needs a manual
