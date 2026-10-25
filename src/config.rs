@@ -63,6 +63,7 @@ impl Container {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseResult {
     Help,
+    Version,
     Run(Config),
 }
 
@@ -123,6 +124,7 @@ impl Config {
 
             match flag {
                 "-h" | "--help" => return Ok(ParseResult::Help),
+                "-V" | "--version" => return Ok(ParseResult::Version),
                 "-o" | "--output" => {
                     output = Some(PathBuf::from(next_value(&mut args, "--output")?));
                 }
@@ -319,6 +321,7 @@ mod tests {
         match parse(list).expect("expected a valid configuration") {
             ParseResult::Run(config) => config,
             ParseResult::Help => panic!("expected a configuration, got help"),
+            ParseResult::Version => panic!("expected a configuration, got version"),
         }
     }
 
@@ -329,6 +332,12 @@ mod tests {
             ParseResult::Help
         );
         assert_eq!(parse(&["-h"]).unwrap(), ParseResult::Help);
+    }
+
+    #[test]
+    fn version_is_recognized() {
+        assert_eq!(parse(&["--version"]).unwrap(), ParseResult::Version);
+        assert_eq!(parse(&["-V"]).unwrap(), ParseResult::Version);
     }
 
     #[test]

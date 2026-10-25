@@ -39,6 +39,10 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             print_help();
             Ok(())
         }
+        ParseResult::Version => {
+            println!("rust-recorder {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
         ParseResult::Run(config) => {
             let session_id = format!(
                 "{}-{}",
@@ -108,6 +112,7 @@ OPTIONS:
         --duration <SECONDS>   Stop after N seconds (1-86400); omit to record until Ctrl-C
         --display <:N>         X11 display [default: $DISPLAY]
     -h, --help                 Print this help
+    -V, --version              Print version
 
 EXIT CODES:
     0  success
