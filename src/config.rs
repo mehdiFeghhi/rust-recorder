@@ -88,6 +88,9 @@ pub enum ConfigError {
     ParentNotDirectory(PathBuf),
     OutputExists(PathBuf),
     InvalidRegion(CaptureError),
+    InvalidMonitor(String),
+    ConflictingCapture,
+    MonitorNotResolved(u32),
 }
 
 impl ConfigError {
@@ -120,7 +123,8 @@ impl Config {
         let mut fps = DEFAULT_FPS;
         let mut duration: Option<u64> = None;
         let mut display = default_display;
-        let mut capture = Capture::FullScreen;
+        let mut region: Option<Region> = None;
+        let mut monitor: Option<u32> = None;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -137,8 +141,17 @@ impl Config {
                             raw.to_string_lossy().into_owned(),
                         ))
                     })?;
-                    capture =
-                        Capture::Region(Region::parse(text).map_err(ConfigError::InvalidRegion)?);
+                    region = Some(Region::parse(text).map_err(ConfigError::InvalidRegion)?);
+                }
+                "--monitor" => {
+                    let raw = next_value(&mut args, "--monitor")?;
+                    let text = raw.to_str().ok_or_else(|| {
+                        ConfigError::InvalidMonitor(raw.to_string_lossy().into_owned())
+                    })?;
+                    monitor = Some(
+                        text.parse()
+                            .map_err(|_| ConfigError::InvalidMonitor(text.to_owned()))?,
+                    );
                 }
                 "-V" | "--version" => return Ok(ParseResult::Version),
                 "--list-monitors" => return Ok(ParseResult::ListMonitors),
@@ -177,6 +190,13 @@ impl Config {
 
         let output = output.ok_or(ConfigError::MissingOutput)?;
         let display = display.ok_or(ConfigError::DisplayUnset)?;
+
+        let capture = match (region, monitor) {
+            (Some(_), Some(_)) => return Err(ConfigError::ConflictingCapture),
+            (Some(region), None) => Capture::Region(region),
+            (None, Some(index)) => Capture::Monitor(index),
+            (None, None) => Capture::FullScreen,
+        };
 
         let config = Config {
             output,
@@ -290,6 +310,17 @@ impl fmt::Display for ConfigError {
                 write!(f, "refusing to overwrite existing file: {}", path.display())
             }
             Self::InvalidRegion(error) => write!(f, "{error}"),
+            Self::InvalidMonitor(value) => {
+                write!(
+                    f,
+                    "invalid --monitor {value:?}: expected a monitor index such as 0"
+                )
+            }
+            Self::ConflictingCapture => write!(f, "--region and --monitor cannot be used together"),
+            Self::MonitorNotResolved(index) => write!(
+                f,
+                "internal error: monitor {index} was not resolved before command construction"
+            ),
         }
     }
 }
@@ -577,6 +608,35 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn monitor_selection_is_parsed() {
+        let dir = temp_dir("capture-monitor");
+        let output = dir.join("out.mp4");
+        let config = config(&["--output", output.to_str().unwrap(), "--monitor", "1"]);
+        assert_eq!(config.capture, Capture::Monitor(1));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_monitor_is_rejected() {
+        let error = parse(&["--output", "out.mp4", "--monitor", "hdmi"]).unwrap_err();
+        assert_eq!(error, ConfigError::InvalidMonitor("hdmi".to_owned()));
+    }
+
+    #[test]
+    fn region_and_monitor_conflict() {
+        let error = parse(&[
+            "--output",
+            "out.mp4",
+            "--region",
+            "640x480+0+0",
+            "--monitor",
+            "0",
+        ])
+        .unwrap_err();
+        assert_eq!(error, ConfigError::ConflictingCapture);
     }
 
     #[test]

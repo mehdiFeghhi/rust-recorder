@@ -53,6 +53,10 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
                 .arg("-i")
                 .arg(format!("{}{}", config.display, region.offset()));
         }
+        Capture::Monitor(index) => {
+            // `main` resolves monitor selection before building the command.
+            return Err(ConfigError::MonitorNotResolved(*index));
+        }
     }
 
     command
@@ -173,6 +177,15 @@ mod tests {
     fn extension_matching_is_case_insensitive() {
         let args = args(&command_for(&config("clip.MP4")));
         assert_has_pair(&args, "-f", "mp4");
+    }
+
+    #[test]
+    fn unresolved_monitor_is_rejected() {
+        let mut cfg = config("clip.mp4");
+        cfg.capture = Capture::Monitor(2);
+
+        let error = build(&cfg).expect_err("monitor must be resolved first");
+        assert_eq!(error, ConfigError::MonitorNotResolved(2));
     }
 
     #[test]

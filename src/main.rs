@@ -20,6 +20,7 @@ mod output;
 mod probe;
 mod process;
 
+use capture::Capture;
 use config::{Config, ParseResult};
 use error::AppError;
 
@@ -54,7 +55,14 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             }
             Ok(())
         }
-        ParseResult::Run(config) => {
+        ParseResult::Run(mut config) => {
+            // Monitor indices are resolved against the live display list
+            // before the command is built.
+            if let Capture::Monitor(index) = config.capture {
+                let monitors = monitor::discover()?;
+                config.capture = Capture::Region(capture::select(index, &monitors)?);
+            }
+
             let session_id = format!(
                 "{}-{}",
                 std::process::id(),
@@ -124,6 +132,7 @@ OPTIONS:
         --display <:N>         X11 display [default: $DISPLAY]
         --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
         --list-monitors        List connected monitors and exit
+        --monitor <N>          Capture the Nth monitor from --list-monitors
     -h, --help                 Print this help
     -V, --version              Print version
 

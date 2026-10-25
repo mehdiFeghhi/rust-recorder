@@ -7,6 +7,7 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::capture::CaptureError;
 use crate::config::ConfigError;
 use crate::monitor::MonitorError;
 use crate::output::OutputError;
@@ -21,6 +22,7 @@ pub enum AppError {
     Output(OutputError),
     Probe(ProbeError),
     Monitor(MonitorError),
+    Capture(CaptureError),
 }
 
 impl AppError {
@@ -32,6 +34,7 @@ impl AppError {
             Self::Output(_) => OutputError::EXIT_CODE,
             Self::Probe(_) => ProbeError::EXIT_CODE,
             Self::Monitor(_) => MonitorError::EXIT_CODE,
+            Self::Capture(_) => CaptureError::EXIT_CODE,
         }
     }
 }
@@ -66,6 +69,12 @@ impl From<MonitorError> for AppError {
     }
 }
 
+impl From<CaptureError> for AppError {
+    fn from(error: CaptureError) -> Self {
+        Self::Capture(error)
+    }
+}
+
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -74,6 +83,7 @@ impl fmt::Display for AppError {
             Self::Output(error) => write!(f, "{error}"),
             Self::Probe(error) => write!(f, "{error}"),
             Self::Monitor(error) => write!(f, "{error}"),
+            Self::Capture(error) => write!(f, "{error}"),
         }
     }
 }
@@ -86,6 +96,7 @@ impl Error for AppError {
             Self::Output(error) => Some(error as &(dyn Error + 'static)),
             Self::Probe(error) => Some(error as &(dyn Error + 'static)),
             Self::Monitor(error) => Some(error as &(dyn Error + 'static)),
+            Self::Capture(error) => Some(error as &(dyn Error + 'static)),
         }
     }
 }
@@ -109,6 +120,15 @@ mod tests {
             grace: Duration::from_secs(1),
         });
         assert_eq!(error.exit_code(), 1);
+    }
+
+    #[test]
+    fn capture_selection_errors_exit_with_two() {
+        let error = AppError::from(CaptureError::MonitorOutOfRange {
+            index: 2,
+            available: 1,
+        });
+        assert_eq!(error.exit_code(), 2);
     }
 
     #[test]

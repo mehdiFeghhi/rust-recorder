@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Monitor selection: `--monitor N` records one monitor from
+  `--list-monitors`, translating its geometry into a capture region.
 - Monitor discovery: `--list-monitors` reports connected outputs, their
   geometry, and the primary flag.
 - Region capture: `--region WIDTHxHEIGHT+X+Y` records a rectangle of the
