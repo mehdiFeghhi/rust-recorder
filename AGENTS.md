@@ -19,8 +19,10 @@ Development is organized into small, reviewable milestones:
 - **Phase 1, M3 — Recording process lifecycle:** start, monitor, and stop
   FFmpeg safely. *(merged)*
 - **Phase 2 — Hardening and v0.1.0:** observability, output probing,
-  integration tests, and release. *(current: 2.4 release preparation)*
-- **Later milestones:** GUI development and additional capture features.
+  integration tests, and release. *(merged)*
+- **Phase 3 — Capture configuration:** rectangular regions, monitor discovery
+  and selection, and interactive selection. *(current: M3.4 capture model)*
+- **Later milestones:** audio capture, GUI development, and Wayland support.
 
 The current milestone must be confirmed from the task instructions and
 repository state before implementation begins.
@@ -113,7 +115,7 @@ Requirements:
 Audio capture and GUI development remain out of scope unless separately
 approved.
 
-### Phase 2 — Hardening (current)
+### Phase 2 — Hardening (merged)
 
 Allowed:
 - Structured logging with `tracing`.
@@ -124,6 +126,16 @@ Allowed:
 
 Not allowed:
 - GUI, audio, Wayland, or streaming unless separately approved.
+
+### Phase 3 — Capture configuration (current)
+
+Allowed:
+- Full-screen and rectangular-region capture.
+- Monitor discovery and selection.
+- Interactive region selection.
+
+Not allowed:
+- Audio capture, GUI, Wayland, or streaming unless separately approved.
 
 ## Before finishing a task
 

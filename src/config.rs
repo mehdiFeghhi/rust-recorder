@@ -11,6 +11,8 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::capture::{Capture, CaptureError, Region};
+
 /// Frame rate used when `--fps` is omitted.
 pub const DEFAULT_FPS: u32 = 30;
 
@@ -27,6 +29,7 @@ pub struct Config {
     pub fps: u32,
     pub duration: Option<u64>,
     pub display: String,
+    pub capture: Capture,
 }
 
 /// Output container selected from the validated output extension.
@@ -83,6 +86,7 @@ pub enum ConfigError {
     ParentMissing(PathBuf),
     ParentNotDirectory(PathBuf),
     OutputExists(PathBuf),
+    InvalidRegion(CaptureError),
 }
 
 impl ConfigError {
@@ -115,6 +119,7 @@ impl Config {
         let mut fps = DEFAULT_FPS;
         let mut duration: Option<u64> = None;
         let mut display = default_display;
+        let mut capture = Capture::FullScreen;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -124,6 +129,16 @@ impl Config {
 
             match flag {
                 "-h" | "--help" => return Ok(ParseResult::Help),
+                "--region" => {
+                    let raw = next_value(&mut args, "--region")?;
+                    let text = raw.to_str().ok_or_else(|| {
+                        ConfigError::InvalidRegion(CaptureError::MalformedRegion(
+                            raw.to_string_lossy().into_owned(),
+                        ))
+                    })?;
+                    capture =
+                        Capture::Region(Region::parse(text).map_err(ConfigError::InvalidRegion)?);
+                }
                 "-V" | "--version" => return Ok(ParseResult::Version),
                 "-o" | "--output" => {
                     output = Some(PathBuf::from(next_value(&mut args, "--output")?));
@@ -166,6 +181,7 @@ impl Config {
             fps,
             duration,
             display,
+            capture,
         };
         config.validate()?;
         Ok(ParseResult::Run(config))
@@ -271,6 +287,7 @@ impl fmt::Display for ConfigError {
             Self::OutputExists(path) => {
                 write!(f, "refusing to overwrite existing file: {}", path.display())
             }
+            Self::InvalidRegion(error) => write!(f, "{error}"),
         }
     }
 }
@@ -516,6 +533,45 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn capture_defaults_to_full_screen() {
+        let dir = temp_dir("capture-default");
+        let output = dir.join("out.mp4");
+        let config = config(&["--output", output.to_str().unwrap()]);
+        assert_eq!(config.capture, Capture::FullScreen);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn region_capture_is_parsed() {
+        let dir = temp_dir("capture-region");
+        let output = dir.join("out.mp4");
+        let config = config(&[
+            "--output",
+            output.to_str().unwrap(),
+            "--region",
+            "640x480+10+20",
+        ]);
+
+        assert_eq!(
+            config.capture,
+            Capture::Region(Region {
+                width: 640,
+                height: 480,
+                x: 10,
+                y: 20,
+            })
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_region_is_rejected() {
+        let error = parse(&["--output", "out.mp4", "--region", "640x"]).unwrap_err();
+        assert!(matches!(error, ConfigError::InvalidRegion(_)));
     }
 
     #[test]
