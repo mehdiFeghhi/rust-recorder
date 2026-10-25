@@ -13,6 +13,7 @@ use std::sync::atomic::AtomicBool;
 mod command;
 mod config;
 mod error;
+mod logging;
 mod output;
 mod process;
 
@@ -20,6 +21,8 @@ use config::{Config, ParseResult};
 use error::AppError;
 
 fn main() -> ExitCode {
+    logging::init();
+
     match run(std::env::args_os().skip(1)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -36,13 +39,41 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             Ok(())
         }
         ParseResult::Run(config) => {
+            let session_id = format!(
+                "{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |elapsed| elapsed.as_secs())
+            );
+            let span = tracing::info_span!(
+                "session",
+                session_id = %session_id,
+                output = %config.output.display(),
+                fps = config.fps,
+                display = %config.display,
+                duration_limit = ?config.duration,
+            );
+            let _guard = span.enter();
+            let started = std::time::Instant::now();
+
+            tracing::info!("recording starting");
+
             let mut cmd = command::build(&config)?;
             let interrupted = Arc::new(AtomicBool::new(false));
             process::install_interrupt_handler(Arc::clone(&interrupted))?;
             process::run(&mut cmd, &interrupted)?;
+
             // Only reached after FFmpeg exits successfully; the file is then
             // checked so a silent no-output run is not reported as success.
             let output = output::verify(&config.output)?;
+
+            tracing::info!(
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                size = output.size,
+                "recording finished"
+            );
+
             eprintln!(
                 "recording finished: {} ({} bytes)",
                 config.output.display(),

@@ -19,9 +19,9 @@ The plan below is executed when the first application code lands.
 - No metrics endpoint or tracing export in the first iteration. Structured
   logs on stderr are enough for a single-process CLI.
 
-## Planned stack
+## Stack
 
-When application code is introduced, logging will use:
+Logging uses:
 
 | Crate | Role |
 | --- | --- |
@@ -34,8 +34,7 @@ through every function. The `log` facade is simpler, but this project is
 already async/process-oriented and will benefit from structured fields.
 
 Trade-off: two crates and a small runtime cost, plus a learning curve. That is
-acceptable once there is real code to observe; adding them now would be an
-unused dependency.
+acceptable now that there is real lifecycle code to observe.
 
 ## Log levels
 
@@ -88,8 +87,9 @@ outside the session loop is attributable.
 
 - All diagnostics go to **stderr**. `stdout` is reserved for machine-readable
   output once the CLI produces any.
-- Default filter is `info`. A future `--verbose`/`-v` flag maps to `debug`,
-  and `-vv` to `trace`; `RUST_LOG` overrides when set, for development.
+- Default filter is `warn`, so normal CLI output stays clean.
+  `RUST_LOG=rust_recorder=info` enables lifecycle events and `debug` adds
+  FFmpeg process detail. A future `--verbose` flag may map onto this.
 - Format: human-readable single lines by default. A `--log-format json` option
   may be added if log collection becomes necessary; not planned now.
 - No log files are written by default. If file logging is added, it must be
@@ -107,11 +107,11 @@ When asking for help, request:
 
 Do not ask for or attach screen recordings.
 
-## Adoption checklist (when logging lands)
+## Adoption status
 
-- [ ] Add `tracing` and `tracing-subscriber` with a `RUST_LOG`-based filter.
-- [ ] Initialize the subscriber once in `main`, before any work.
-- [ ] Emit the events above with structured fields.
-- [ ] Add a test that an invalid configuration produces `config.invalid` and a
-      non-zero exit.
-- [ ] Confirm no `println!` diagnostics remain on `stdout`.
+- [x] `tracing` and `tracing-subscriber` with a `RUST_LOG`-based filter.
+- [x] Subscriber initialized once in `main`, writing to stderr.
+- [x] Session span (`session_id`, `output`, `fps`, `display`) and lifecycle
+      events (start, finish, interrupt, exit, shutdown timeout).
+- [x] No captured screen or audio content is logged.
+- [ ] `--verbose` / `-vv` flags (use `RUST_LOG` for now).

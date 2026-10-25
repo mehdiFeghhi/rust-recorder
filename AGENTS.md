@@ -17,8 +17,10 @@ Development is organized into small, reviewable milestones:
 - **Phase 1, M2 — FFmpeg command construction:** build and test FFmpeg
   arguments without starting the process. *(merged)*
 - **Phase 1, M3 — Recording process lifecycle:** start, monitor, and stop
-  FFmpeg safely. *(current)*
-- **Later milestones:** recording validation, diagnostics, and GUI development.
+  FFmpeg safely. *(merged)*
+- **Phase 2 — Hardening and v0.1.0:** observability, output probing,
+  integration tests, and release. *(current: 2.1 observability)*
+- **Later milestones:** GUI development and additional capture features.
 
 The current milestone must be confirmed from the task instructions and
 repository state before implementation begins.
@@ -88,7 +90,7 @@ Not allowed:
 Command construction must not use shell-string interpolation. Pass executable
 arguments separately to avoid shell interpretation.
 
-### M3 — Recording process lifecycle (current)
+### M3 — Recording process lifecycle (merged)
 
 Allowed:
 - Starting FFmpeg.
@@ -110,6 +112,18 @@ Requirements:
 
 Audio capture and GUI development remain out of scope unless separately
 approved.
+
+### Phase 2 — Hardening (current)
+
+Allowed:
+- Structured logging with `tracing`.
+- Output verification with `ffprobe`.
+- Integration tests with a fake FFmpeg executable.
+- Documentation and release preparation; version tags only with explicit
+  approval.
+
+Not allowed:
+- GUI, audio, Wayland, or streaming unless separately approved.
 
 ## Before finishing a task
 
