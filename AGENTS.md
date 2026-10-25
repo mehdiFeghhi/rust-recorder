@@ -21,8 +21,10 @@ Development is organized into small, reviewable milestones:
 - **Phase 2 — Hardening and v0.1.0:** observability, output probing,
   integration tests, and release. *(merged)*
 - **Phase 3 — Capture configuration:** rectangular regions, monitor discovery
-  and selection, and interactive selection. *(current: M3.8 interactive region selection)*
-- **Later milestones:** audio capture, GUI development, and Wayland support.
+  and selection, and interactive selection. *(merged)*
+- **Phase 4 — Audio:** source discovery, selection, and recording. *(current:
+  M4.1 audio design)*
+- **Later milestones:** GUI development and Wayland support.
 
 The current milestone must be confirmed from the task instructions and
 repository state before implementation begins.
@@ -127,7 +129,7 @@ Allowed:
 Not allowed:
 - GUI, audio, Wayland, or streaming unless separately approved.
 
-### Phase 3 — Capture configuration (current)
+### Phase 3 — Capture configuration (merged)
 
 Allowed:
 - Full-screen and rectangular-region capture.
@@ -136,6 +138,16 @@ Allowed:
 
 Not allowed:
 - Audio capture, GUI, Wayland, or streaming unless separately approved.
+
+### Phase 4 — Audio (current)
+
+Allowed:
+- Audio source discovery and selection.
+- Microphone and system-audio capture.
+- Mixing microphone and system audio into one track.
+
+Not allowed:
+- GUI, Wayland, streaming, or separate-track audio unless separately approved.
 
 ## Before finishing a task
 

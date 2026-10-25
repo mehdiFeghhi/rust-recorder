@@ -106,6 +106,7 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 - [CHANGELOG.md](CHANGELOG.md) — notable changes
 - [docs/observability.md](docs/observability.md) — logging and diagnostics policy
+- [docs/audio.md](docs/audio.md) — audio subsystem design
 - [AGENTS.md](AGENTS.md) — instructions for AI coding agents
 
 ## Known limitations
