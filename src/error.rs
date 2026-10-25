@@ -9,6 +9,7 @@ use std::fmt;
 
 use crate::config::ConfigError;
 use crate::output::OutputError;
+use crate::probe::ProbeError;
 use crate::process::ProcessError;
 
 /// Failure that terminates the program.
@@ -17,6 +18,7 @@ pub enum AppError {
     Config(ConfigError),
     Process(ProcessError),
     Output(OutputError),
+    Probe(ProbeError),
 }
 
 impl AppError {
@@ -26,6 +28,7 @@ impl AppError {
             Self::Config(_) => ConfigError::EXIT_CODE,
             Self::Process(_) => ProcessError::EXIT_CODE,
             Self::Output(_) => OutputError::EXIT_CODE,
+            Self::Probe(_) => ProbeError::EXIT_CODE,
         }
     }
 }
@@ -48,12 +51,19 @@ impl From<OutputError> for AppError {
     }
 }
 
+impl From<ProbeError> for AppError {
+    fn from(error: ProbeError) -> Self {
+        Self::Probe(error)
+    }
+}
+
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Config(error) => write!(f, "{error}"),
             Self::Process(error) => write!(f, "{error}"),
             Self::Output(error) => write!(f, "{error}"),
+            Self::Probe(error) => write!(f, "{error}"),
         }
     }
 }
@@ -64,6 +74,7 @@ impl Error for AppError {
             Self::Config(error) => Some(error as &(dyn Error + 'static)),
             Self::Process(error) => Some(error as &(dyn Error + 'static)),
             Self::Output(error) => Some(error as &(dyn Error + 'static)),
+            Self::Probe(error) => Some(error as &(dyn Error + 'static)),
         }
     }
 }
@@ -86,6 +97,12 @@ mod tests {
         let error = AppError::from(ProcessError::ShutdownTimeout {
             grace: Duration::from_secs(1),
         });
+        assert_eq!(error.exit_code(), 1);
+    }
+
+    #[test]
+    fn probe_errors_exit_with_one() {
+        let error = AppError::from(ProbeError::NoVideoStream);
         assert_eq!(error.exit_code(), 1);
     }
 

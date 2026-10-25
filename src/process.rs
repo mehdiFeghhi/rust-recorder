@@ -111,6 +111,7 @@ fn run_with_grace(
             .spawn()
             .map_err(|source| ProcessError::Spawn { source })?,
     );
+    tracing::debug!(pid = child.0.id(), "ffmpeg spawned");
 
     loop {
         if let Some(status) = child
@@ -131,6 +132,8 @@ fn run_with_grace(
 
 /// Ask FFmpeg to finalize, then wait at most `grace` before killing it.
 fn shutdown(child: &mut ChildGuard, grace: Duration) -> Result<(), ProcessError> {
+    tracing::warn!("interrupt received; asking ffmpeg to finalize");
+
     if let Some(mut stdin) = child.0.stdin.take() {
         match stdin.write_all(b"q\n") {
             Ok(()) => {}
@@ -141,6 +144,7 @@ fn shutdown(child: &mut ChildGuard, grace: Duration) -> Result<(), ProcessError>
         }
         // Dropping the handle closes the pipe, so FFmpeg also sees EOF.
     }
+    tracing::debug!("sent q to ffmpeg and closed its stdin");
 
     let deadline = Instant::now() + grace;
     loop {
@@ -153,6 +157,7 @@ fn shutdown(child: &mut ChildGuard, grace: Duration) -> Result<(), ProcessError>
         }
 
         if Instant::now() >= deadline {
+            tracing::error!(?grace, "ffmpeg did not stop in time; killing it");
             // Best effort: the child may have exited between the check and the
             // kill. Either way the guard below reaps it.
             let _ = child.0.kill();
@@ -165,6 +170,8 @@ fn shutdown(child: &mut ChildGuard, grace: Duration) -> Result<(), ProcessError>
 }
 
 fn exit_status(status: ExitStatus) -> Result<(), ProcessError> {
+    tracing::debug!(?status, "ffmpeg exited");
+
     if status.success() {
         Ok(())
     } else {
