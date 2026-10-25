@@ -21,7 +21,7 @@ Development is organized into small, reviewable milestones:
 - **Phase 2 — Hardening and v0.1.0:** observability, output probing,
   integration tests, and release. *(merged)*
 - **Phase 3 — Capture configuration:** rectangular regions, monitor discovery
-  and selection, and interactive selection. *(current: M3.6 monitor selection)*
+  and selection, and interactive selection. *(current: M3.7 region bounds validation)*
 - **Later milestones:** audio capture, GUI development, and Wayland support.
 
 The current milestone must be confirmed from the task instructions and

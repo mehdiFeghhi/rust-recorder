@@ -87,6 +87,39 @@ pub fn select(index: u32, monitors: &[Monitor]) -> Result<Region, CaptureError> 
     })
 }
 
+/// Check that an explicit rectangle fits inside the connected desktop.
+pub fn validate_region(region: Region, monitors: &[Monitor]) -> Result<(), CaptureError> {
+    let Some((screen_width, screen_height)) = desktop_bounds(monitors) else {
+        return Err(CaptureError::NoMonitors);
+    };
+
+    let right = u64::from(region.x.max(0) as u32) + u64::from(region.width);
+    let bottom = u64::from(region.y.max(0) as u32) + u64::from(region.height);
+
+    if right > u64::from(screen_width) || bottom > u64::from(screen_height) {
+        return Err(CaptureError::RegionOutOfBounds {
+            region,
+            screen_width,
+            screen_height,
+        });
+    }
+
+    Ok(())
+}
+
+/// The desktop size implied by the connected monitor rectangles.
+fn desktop_bounds(monitors: &[Monitor]) -> Option<(u32, u32)> {
+    let width = monitors
+        .iter()
+        .map(|monitor| (monitor.x + monitor.width as i32).max(0) as u32)
+        .max()?;
+    let height = monitors
+        .iter()
+        .map(|monitor| (monitor.y + monitor.height as i32).max(0) as u32)
+        .max()?;
+    Some((width, height))
+}
+
 /// Why a capture region could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaptureError {
@@ -98,6 +131,14 @@ pub enum CaptureError {
     NegativeOrigin,
     /// The requested monitor index does not exist.
     MonitorOutOfRange { index: u32, available: usize },
+    /// No connected monitors, so desktop bounds are unknown.
+    NoMonitors,
+    /// The rectangle does not fit inside the desktop.
+    RegionOutOfBounds {
+        region: Region,
+        screen_width: u32,
+        screen_height: u32,
+    },
 }
 
 impl CaptureError {
@@ -119,6 +160,19 @@ impl fmt::Display for CaptureError {
             Self::MonitorOutOfRange { index, available } => write!(
                 f,
                 "monitor {index} does not exist; {available} connected monitor(s) found"
+            ),
+            Self::NoMonitors => write!(
+                f,
+                "cannot validate the region: no connected monitors were found"
+            ),
+            Self::RegionOutOfBounds {
+                region,
+                screen_width,
+                screen_height,
+            } => write!(
+                f,
+                "region {}x{}+{}+{} does not fit within the {screen_width}x{screen_height} desktop",
+                region.width, region.height, region.x, region.y,
             ),
         }
     }
@@ -153,6 +207,45 @@ mod tests {
                 x: 1920,
                 y: 0,
             }
+        );
+    }
+
+    #[test]
+    fn accepts_a_region_inside_the_desktop() {
+        let monitors = [monitor(1920, 1200, 0, 0)];
+
+        assert!(validate_region(Region::parse("640x480+100+80").unwrap(), &monitors).is_ok());
+        assert!(validate_region(Region::parse("1920x1200+0+0").unwrap(), &monitors).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_region_outside_the_desktop() {
+        let monitors = [monitor(1920, 1200, 0, 0)];
+        let region = Region::parse("640x480+1500+800").unwrap();
+
+        assert_eq!(
+            validate_region(region, &monitors).unwrap_err(),
+            CaptureError::RegionOutOfBounds {
+                region,
+                screen_width: 1920,
+                screen_height: 1200,
+            }
+        );
+    }
+
+    #[test]
+    fn uses_the_union_of_monitors_for_bounds() {
+        let monitors = [monitor(1920, 1200, 0, 0), monitor(2560, 1440, 1920, 0)];
+
+        assert!(validate_region(Region::parse("2560x1440+1920+0").unwrap(), &monitors).is_ok());
+        assert!(validate_region(Region::parse("2560x1440+1920+1").unwrap(), &monitors).is_err());
+    }
+
+    #[test]
+    fn rejects_a_region_without_monitors() {
+        assert_eq!(
+            validate_region(Region::parse("640x480+0+0").unwrap(), &[]).unwrap_err(),
+            CaptureError::NoMonitors
         );
     }
 
