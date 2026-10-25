@@ -10,3 +10,4 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
+ctrlc = "3"

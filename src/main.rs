@@ -9,6 +9,8 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 mod command;
 mod config;
@@ -82,7 +84,9 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
         }
         ParseResult::Run(config) => {
             let mut cmd = command::build(&config)?;
-            process::run(&mut cmd)?;
+            let interrupted = Arc::new(AtomicBool::new(false));
+            process::install_interrupt_handler(Arc::clone(&interrupted))?;
+            process::run(&mut cmd, &interrupted)?;
             // Only reached after FFmpeg exits successfully.
             eprintln!("recording finished: {}", config.output.display());
             Ok(())

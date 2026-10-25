@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 - Command-line recording: `rust-recorder --output <PATH> [--fps N]
   [--duration SECONDS]` builds an FFmpeg `x11grab`/`libx264` command and reports
   its exit status.
+- Ctrl-C stops recording gracefully: FFmpeg is asked to finalize the container
+  and gets up to 10 seconds before being killed.
 - Engineering foundation: pinned Rust toolchain, CI quality gates
   (format, check, Clippy, tests, release build), dependency policy enforced by
   `cargo-deny`, weekly Dependabot updates, and a tag-driven release workflow

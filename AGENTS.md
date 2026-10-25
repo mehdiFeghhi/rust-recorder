@@ -104,8 +104,8 @@ Requirements:
 - Do not claim success unless FFmpeg exits successfully and the expected
   output has been checked appropriately.
 - Keep process management separate from CLI parsing where useful.
-- Milestone 3.1 covers synchronous execution and exit-status reporting only;
-  Ctrl-C handling and graceful shutdown are deferred to a later milestone.
+- M3.1 adds synchronous execution and exit-status reporting; M3.2 adds
+  Ctrl-C handling and graceful shutdown.
 
 Audio capture and GUI development remain out of scope unless separately
 approved.

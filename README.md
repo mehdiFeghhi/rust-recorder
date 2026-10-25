@@ -3,9 +3,9 @@
 A desktop screen recorder for Linux, built in Rust on top of FFmpeg.
 
 > **Status: Phase 1 — command-line prototype (in progress).**
-> The CLI validates arguments, builds an FFmpeg `x11grab` command, and runs it
-> to completion. Graceful interruption and output verification are not
-> implemented yet.
+> The CLI validates arguments, builds an FFmpeg `x11grab` command, runs it to
+> completion, and finalizes the file gracefully on Ctrl-C. Output verification
+> and audio are not implemented yet.
 
 ## Scope
 
@@ -79,9 +79,10 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 
 ## Known limitations
 
-- Recording runs FFmpeg synchronously; Ctrl-C is not handled by the
-  application yet, so there is no graceful shutdown and no post-exit output
-  verification. No audio capture yet.
+- Ctrl-C asks FFmpeg to finalize (`q` on stdin) and waits up to 10 seconds
+  before killing it. A second Ctrl-C does not shorten that wait.
+- The output file is not verified after FFmpeg exits (playability, duration).
+- No audio capture yet.
 - Linux/X11 only. Wayland is unsupported and untested.
 - CI verifies formatting, compilation, lints, tests, and packaging. It cannot
   verify that screen capture works on a real desktop; that needs a manual
