@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Interactive selection: `--select-region` uses FFmpeg `x11grab`'s pointer
+  selection, so no GUI code is needed.
 - Region bounds validation: an explicit `--region` must fit within the
   connected desktop; out-of-bounds rectangles are rejected before FFmpeg runs.
 - Monitor selection: `--monitor N` records one monitor from

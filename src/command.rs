@@ -53,6 +53,17 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
                 .arg("-i")
                 .arg(format!("{}{}", config.display, region.offset()));
         }
+        Capture::SelectRegion => {
+            command
+                .arg("-f")
+                .arg("x11grab")
+                .arg("-framerate")
+                .arg(config.fps.to_string())
+                .arg("-select_region")
+                .arg("1")
+                .arg("-i")
+                .arg(&config.display);
+        }
         Capture::Monitor(index) => {
             // `main` resolves monitor selection before building the command.
             return Err(ConfigError::MonitorNotResolved(*index));
@@ -177,6 +188,17 @@ mod tests {
     fn extension_matching_is_case_insensitive() {
         let args = args(&command_for(&config("clip.MP4")));
         assert_has_pair(&args, "-f", "mp4");
+    }
+
+    #[test]
+    fn interactive_selection_passes_the_flag() {
+        let mut cfg = config("clip.mp4");
+        cfg.capture = Capture::SelectRegion;
+        let args = args(&command_for(&cfg));
+
+        assert_has_pair(&args, "-select_region", "1");
+        assert!(!args.iter().any(|arg| arg == "-video_size"));
+        assert_has_pair(&args, "-i", ":1");
     }
 
     #[test]

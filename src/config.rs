@@ -125,6 +125,7 @@ impl Config {
         let mut display = default_display;
         let mut region: Option<Region> = None;
         let mut monitor: Option<u32> = None;
+        let mut select_region = false;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -154,6 +155,7 @@ impl Config {
                     );
                 }
                 "-V" | "--version" => return Ok(ParseResult::Version),
+                "--select-region" => select_region = true,
                 "--list-monitors" => return Ok(ParseResult::ListMonitors),
                 "-o" | "--output" => {
                     output = Some(PathBuf::from(next_value(&mut args, "--output")?));
@@ -191,11 +193,18 @@ impl Config {
         let output = output.ok_or(ConfigError::MissingOutput)?;
         let display = display.ok_or(ConfigError::DisplayUnset)?;
 
-        let capture = match (region, monitor) {
-            (Some(_), Some(_)) => return Err(ConfigError::ConflictingCapture),
-            (Some(region), None) => Capture::Region(region),
-            (None, Some(index)) => Capture::Monitor(index),
-            (None, None) => Capture::FullScreen,
+        let capture = if select_region {
+            if region.is_some() || monitor.is_some() {
+                return Err(ConfigError::ConflictingCapture);
+            }
+            Capture::SelectRegion
+        } else {
+            match (region, monitor) {
+                (Some(_), Some(_)) => return Err(ConfigError::ConflictingCapture),
+                (Some(region), None) => Capture::Region(region),
+                (None, Some(index)) => Capture::Monitor(index),
+                (None, None) => Capture::FullScreen,
+            }
         };
 
         let config = Config {
@@ -608,6 +617,24 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn interactive_selection_is_parsed() {
+        let dir = temp_dir("capture-select");
+        let output = dir.join("out.mp4");
+        let config = config(&["--output", output.to_str().unwrap(), "--select-region"]);
+        assert_eq!(config.capture, Capture::SelectRegion);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn select_region_conflicts_with_region_and_monitor() {
+        for extra in [vec!["--region", "640x480+0+0"], vec!["--monitor", "0"]] {
+            let mut args = vec!["--output", "out.mp4", "--select-region"];
+            args.extend(extra);
+            assert_eq!(parse(&args).unwrap_err(), ConfigError::ConflictingCapture);
+        }
     }
 
     #[test]
