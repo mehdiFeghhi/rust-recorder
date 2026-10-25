@@ -19,7 +19,7 @@ Development is organized into small, reviewable milestones:
 - **Phase 1, M3 — Recording process lifecycle:** start, monitor, and stop
   FFmpeg safely. *(merged)*
 - **Phase 2 — Hardening and v0.1.0:** observability, output probing,
-  integration tests, and release. *(current: 2.2 output probing)*
+  integration tests, and release. *(current: 2.3 integration tests)*
 - **Later milestones:** GUI development and additional capture features.
 
 The current milestone must be confirmed from the task instructions and

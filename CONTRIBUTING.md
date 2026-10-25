@@ -118,6 +118,10 @@ What to do when a gate fails:
 - Code that spawns or supervises FFmpeg must be testable without a real
   display: put process handling behind a small interface and use a fake
   process in tests.
+- End-to-end CLI tests live in `tests/cli.rs` and place fake `ffmpeg`/`ffprobe`
+  scripts first on `PATH`, so they run without a display or an FFmpeg install.
+- Run the real-capture test explicitly on a machine with X11 and FFmpeg:
+  `cargo test --locked --test cli -- --ignored`.
 - Behavior that cannot be tested in CI (actual X11 capture) requires a manual
   smoke test, documented in the PR description: what was recorded, for how
   long, and whether the output played back.
