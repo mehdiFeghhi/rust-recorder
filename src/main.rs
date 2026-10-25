@@ -1,37 +1,53 @@
 //! `rust-recorder` entry point.
 //!
-//! Milestone 1 covers argument parsing and validation only. It prints the
-//! effective configuration and exits; FFmpeg is introduced in milestone 3.
+//! Flow: parse and validate the command line into a [`Config`], build the
+//! FFmpeg invocation with [`command::build`], execute it to completion with
+//! [`process::run`], then verify the file with [`output::verify`]. Failures are
+//! aggregated by [`error::AppError`], which owns the exit-code mapping.
 
 use std::ffi::OsString;
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 mod command;
 mod config;
+mod error;
+mod output;
+mod process;
 
-use config::{Config, ConfigError, ParseResult};
+use config::{Config, ParseResult};
+use error::AppError;
 
 fn main() -> ExitCode {
     match run(std::env::args_os().skip(1)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
-            ExitCode::from(ConfigError::EXIT_CODE)
+            ExitCode::from(error.exit_code())
         }
     }
 }
 
-fn run(args: impl Iterator<Item = OsString>) -> Result<(), ConfigError> {
+fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
     match Config::parse(args)? {
         ParseResult::Help => {
             print_help();
             Ok(())
         }
         ParseResult::Run(config) => {
-            // Milestone 2 checkpoint: print the command that milestone 3 will
-            // spawn. It is never passed through a shell.
-            let cmd = command::build(&config)?;
-            println!("{cmd:?}");
+            let mut cmd = command::build(&config)?;
+            let interrupted = Arc::new(AtomicBool::new(false));
+            process::install_interrupt_handler(Arc::clone(&interrupted))?;
+            process::run(&mut cmd, &interrupted)?;
+            // Only reached after FFmpeg exits successfully; the file is then
+            // checked so a silent no-output run is not reported as success.
+            let output = output::verify(&config.output)?;
+            eprintln!(
+                "recording finished: {} ({} bytes)",
+                config.output.display(),
+                output.size
+            );
             Ok(())
         }
     }

@@ -15,9 +15,9 @@ Development is organized into small, reviewable milestones:
 - **Phase 1, M1 — Configuration and CLI:** argument parsing, configuration
   validation, help output, and predictable exit codes. *(merged)*
 - **Phase 1, M2 — FFmpeg command construction:** build and test FFmpeg
-  arguments without starting the process. *(current)*
+  arguments without starting the process. *(merged)*
 - **Phase 1, M3 — Recording process lifecycle:** start, monitor, and stop
-  FFmpeg safely.
+  FFmpeg safely. *(current)*
 - **Later milestones:** recording validation, diagnostics, and GUI development.
 
 The current milestone must be confirmed from the task instructions and
@@ -72,7 +72,7 @@ Not allowed:
 - Recording audio.
 - GUI implementation.
 
-### M2 — FFmpeg command construction (current)
+### M2 — FFmpeg command construction (merged)
 
 Allowed:
 - Building an FFmpeg command from validated configuration.
@@ -88,7 +88,7 @@ Not allowed:
 Command construction must not use shell-string interpolation. Pass executable
 arguments separately to avoid shell interpretation.
 
-### M3 — Recording process lifecycle
+### M3 — Recording process lifecycle (current)
 
 Allowed:
 - Starting FFmpeg.
@@ -104,6 +104,9 @@ Requirements:
 - Do not claim success unless FFmpeg exits successfully and the expected
   output has been checked appropriately.
 - Keep process management separate from CLI parsing where useful.
+- M3.1 adds synchronous execution and exit-status reporting; M3.2 adds
+  Ctrl-C handling and graceful shutdown; M3.3 verifies that the output file is
+  a non-empty regular file after a successful exit.
 
 Audio capture and GUI development remain out of scope unless separately
 approved.
