@@ -42,6 +42,21 @@ process exit status is reported. Diagnostics are off by default; use
 FFmpeg process detail. A missing `ffmpeg` binary, an unreachable
 `DISPLAY`, or an FFmpeg failure produces a nonzero exit status.
 
+## Usage
+
+```bash
+# Record the whole display for 10 seconds
+rust-recorder --output /tmp/demo.mp4 --duration 10
+
+# Record until Ctrl-C
+rust-recorder --output /tmp/demo.mp4
+
+# Print the version
+rust-recorder --version
+```
+
+Requires an X11 session and `ffmpeg` / `ffprobe` on `PATH`.
+
 ## Quality gates
 
 Run the same checks CI runs before opening a pull request:
