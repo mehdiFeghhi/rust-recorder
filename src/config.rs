@@ -33,6 +33,7 @@ pub struct Config {
     pub capture: Capture,
     pub audio: AudioMode,
     pub microphone_device: Option<String>,
+    pub system_audio_device: Option<String>,
 }
 
 /// Output container selected from the validated output extension.
@@ -98,7 +99,9 @@ pub enum ConfigError {
     InvalidAudioMode(String),
     UnsupportedAudioMode(AudioMode),
     AudioDeviceWithoutMode,
+    SystemDeviceWithoutMode,
     MissingAudioDevice,
+    MissingSystemAudioDevice,
 }
 
 impl ConfigError {
@@ -136,6 +139,7 @@ impl Config {
         let mut select_region = false;
         let mut audio = AudioMode::None;
         let mut microphone_device: Option<String> = None;
+        let mut system_audio_device: Option<String> = None;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -180,6 +184,13 @@ impl Config {
                         ConfigError::InvalidAudioMode(raw.to_string_lossy().into_owned())
                     })?;
                     microphone_device = Some(text.to_owned());
+                }
+                "--system-audio-device" => {
+                    let raw = next_value(&mut args, "--system-audio-device")?;
+                    let text = raw.to_str().ok_or_else(|| {
+                        ConfigError::InvalidAudioMode(raw.to_string_lossy().into_owned())
+                    })?;
+                    system_audio_device = Some(text.to_owned());
                 }
                 "--list-monitors" => return Ok(ParseResult::ListMonitors),
                 "--list-audio-devices" => return Ok(ParseResult::ListAudioDevices),
@@ -241,6 +252,7 @@ impl Config {
             capture,
             audio,
             microphone_device,
+            system_audio_device,
         };
         config.validate()?;
         Ok(ParseResult::Run(config))
@@ -262,15 +274,16 @@ impl Config {
             _ => {}
         }
 
-        match self.audio {
-            AudioMode::System | AudioMode::Both => {
-                return Err(ConfigError::UnsupportedAudioMode(self.audio));
-            }
-            AudioMode::None | AudioMode::Microphone => {}
+        if self.audio == AudioMode::Both {
+            return Err(ConfigError::UnsupportedAudioMode(AudioMode::Both));
         }
 
         if self.microphone_device.is_some() && self.audio != AudioMode::Microphone {
             return Err(ConfigError::AudioDeviceWithoutMode);
+        }
+
+        if self.system_audio_device.is_some() && self.audio != AudioMode::System {
+            return Err(ConfigError::SystemDeviceWithoutMode);
         }
 
         validate_display(&self.display)?;
@@ -375,12 +388,19 @@ impl fmt::Display for ConfigError {
             ),
             Self::UnsupportedAudioMode(mode) => write!(
                 f,
-                "audio mode {} is not implemented yet; use none or mic",
+                "audio mode {} is not implemented yet; use none, mic, or system",
                 mode.label()
             ),
             Self::AudioDeviceWithoutMode => {
                 write!(f, "--microphone-device requires --audio mic")
             }
+            Self::SystemDeviceWithoutMode => {
+                write!(f, "--system-audio-device requires --audio system")
+            }
+            Self::MissingSystemAudioDevice => write!(
+                f,
+                "internal error: system audio device was not resolved before command construction"
+            ),
             Self::MissingAudioDevice => write!(
                 f,
                 "internal error: microphone device was not resolved before command construction"
@@ -728,8 +748,43 @@ mod tests {
         );
 
         assert_eq!(
-            parse(&["--output", "out.mp4", "--audio", "system"]).unwrap_err(),
-            ConfigError::UnsupportedAudioMode(AudioMode::System)
+            parse(&[
+                "--output",
+                "out.mp4",
+                "--audio",
+                "system",
+                "--microphone-device",
+                "x"
+            ])
+            .unwrap_err(),
+            ConfigError::AudioDeviceWithoutMode
+        );
+    }
+
+    #[test]
+    fn system_audio_mode_is_parsed() {
+        let dir = temp_dir("audio-system");
+        let output = dir.join("out.mp4");
+        let config = config(&[
+            "--output",
+            output.to_str().unwrap(),
+            "--audio",
+            "system",
+            "--system-audio-device",
+            "sink.monitor",
+        ]);
+
+        assert_eq!(config.audio, AudioMode::System);
+        assert_eq!(config.system_audio_device.as_deref(), Some("sink.monitor"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn both_mode_is_not_implemented() {
+        assert_eq!(
+            parse(&["--output", "out.mp4", "--audio", "both"]).unwrap_err(),
+            ConfigError::UnsupportedAudioMode(AudioMode::Both)
         );
     }
 

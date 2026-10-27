@@ -79,8 +79,12 @@ pub enum AudioError {
     UnknownDevice { requested: String },
     /// The requested id exists but is an output monitor, not a microphone.
     NotAMicrophone { requested: String },
+    /// The requested id exists but is not an output monitor.
+    NotASystemOutput { requested: String },
     /// No microphone sources are available.
     NoMicrophone,
+    /// No output-monitor sources are available.
+    NoSystemOutput,
 }
 
 impl AudioError {
@@ -108,14 +112,22 @@ impl fmt::Display for AudioError {
             }
             Self::UnknownDevice { requested } => write!(
                 f,
-                "microphone {requested:?} was not found; run --list-audio-devices"
+                "audio source {requested:?} was not found; run --list-audio-devices"
             ),
             Self::NotAMicrophone { requested } => {
                 write!(f, "{requested:?} is an output monitor, not a microphone")
             }
+            Self::NotASystemOutput { requested } => write!(
+                f,
+                "{requested:?} is not an output monitor, not usable for system audio"
+            ),
             Self::NoMicrophone => {
                 write!(f, "no microphone sources found; run --list-audio-devices")
             }
+            Self::NoSystemOutput => write!(
+                f,
+                "no output-monitor sources found; system audio is unavailable"
+            ),
         }
     }
 }
@@ -127,7 +139,9 @@ impl Error for AudioError {
             Self::Failed { .. }
             | Self::UnknownDevice { .. }
             | Self::NotAMicrophone { .. }
-            | Self::NoMicrophone => None,
+            | Self::NotASystemOutput { .. }
+            | Self::NoMicrophone
+            | Self::NoSystemOutput => None,
         }
     }
 }
@@ -229,6 +243,35 @@ pub fn select_microphone(
         .ok_or(AudioError::NoMicrophone)
 }
 
+/// Choose the output monitor to record: the requested id, or the first one.
+pub fn select_system_output(
+    requested: Option<&str>,
+    sources: &[AudioSource],
+) -> Result<AudioSource, AudioError> {
+    if let Some(id) = requested {
+        let source = sources
+            .iter()
+            .find(|source| source.id == id)
+            .ok_or_else(|| AudioError::UnknownDevice {
+                requested: id.to_owned(),
+            })?;
+
+        if source.kind != AudioSourceKind::SystemOutput {
+            return Err(AudioError::NotASystemOutput {
+                requested: id.to_owned(),
+            });
+        }
+
+        return Ok(source.clone());
+    }
+
+    sources
+        .iter()
+        .find(|source| source.kind == AudioSourceKind::SystemOutput)
+        .cloned()
+        .ok_or(AudioError::NoSystemOutput)
+}
+
 /// Render the table printed by `--list-audio-devices`.
 pub fn render(sources: &[AudioSource]) -> String {
     let mut output = String::from("Audio sources:\n");
@@ -305,6 +348,39 @@ mod tests {
         assert!(matches!(
             select_microphone(None, &parse(monitor_only)),
             Err(AudioError::NoMicrophone)
+        ));
+    }
+
+    #[test]
+    fn selects_the_system_output() {
+        let sources = parse(SAMPLE);
+        let monitor = "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor";
+
+        assert_eq!(
+            select_system_output(Some(monitor), &sources)
+                .expect("known monitor")
+                .id,
+            monitor
+        );
+        assert_eq!(
+            select_system_output(None, &sources)
+                .expect("default monitor")
+                .id,
+            monitor
+        );
+    }
+
+    #[test]
+    fn rejects_non_monitor_system_devices() {
+        let sources = parse(SAMPLE);
+
+        assert!(matches!(
+            select_system_output(Some("alsa_input.pci-0000_00_1f.3.analog-stereo"), &sources),
+            Err(AudioError::NotASystemOutput { .. })
+        ));
+        assert!(matches!(
+            select_system_output(None, &parse("Source #1\n\tName: mic_input\n")),
+            Err(AudioError::NoSystemOutput)
         ));
     }
 

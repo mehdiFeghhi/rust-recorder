@@ -29,6 +29,8 @@ pub enum ProbeError {
     Failed { status: ExitStatus, stderr: String },
     /// The container has no readable video stream.
     NoVideoStream,
+    /// The container has no readable audio stream.
+    NoAudioStream,
     /// `ffprobe` did not report a duration.
     MissingDuration,
     /// The reported duration is not a number.
@@ -58,6 +60,7 @@ impl fmt::Display for ProbeError {
                 }
             }
             Self::NoVideoStream => write!(f, "the recording contains no video stream"),
+            Self::NoAudioStream => write!(f, "the recording contains no audio stream"),
             Self::MissingDuration => write!(f, "ffprobe reported no duration"),
             Self::InvalidDuration(value) => {
                 write!(f, "ffprobe reported an invalid duration: {value:?}")
@@ -75,11 +78,61 @@ impl Error for ProbeError {
             Self::Spawn { source } => Some(source),
             Self::Failed { .. }
             | Self::NoVideoStream
+            | Self::NoAudioStream
             | Self::MissingDuration
             | Self::InvalidDuration(_)
             | Self::NonPositiveDuration(_) => None,
         }
     }
+}
+
+/// Codec of the first audio stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioInfo {
+    pub codec: String,
+}
+
+/// Probe the audio stream at `path` with the system `ffprobe`.
+pub fn inspect_audio(path: &Path) -> Result<AudioInfo, ProbeError> {
+    inspect_audio_with(FFPROBE_PROGRAM, path)
+}
+
+pub(crate) fn inspect_audio_with(program: &str, path: &Path) -> Result<AudioInfo, ProbeError> {
+    let output = Command::new(program)
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "default=noprint_wrappers=1",
+        ])
+        .arg(path)
+        .output()
+        .map_err(|source| ProbeError::Spawn { source })?;
+
+    if !output.status.success() {
+        return Err(ProbeError::Failed {
+            status: output.status,
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+
+    parse_audio(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn parse_audio(stdout: &str) -> Result<AudioInfo, ProbeError> {
+    let codec = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("codec_name="))
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "unknown")
+        .map(str::to_owned)
+        .ok_or(ProbeError::NoAudioStream)?;
+
+    Ok(AudioInfo { codec })
 }
 
 /// Probe the recording at `path` with the system `ffprobe`.
@@ -148,6 +201,38 @@ fn parse(stdout: &str) -> Result<ProbeInfo, ProbeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_the_audio_codec() {
+        assert_eq!(
+            parse_audio("codec_name=aac\n").expect("audio codec"),
+            AudioInfo {
+                codec: "aac".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_missing_audio_streams() {
+        assert!(matches!(
+            parse_audio("codec_name=unknown\n"),
+            Err(ProbeError::NoAudioStream)
+        ));
+        assert!(matches!(parse_audio(""), Err(ProbeError::NoAudioStream)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn audio_probe_failures_are_reported() {
+        assert!(matches!(
+            inspect_audio_with("false", Path::new("/tmp/never-read.mp4")),
+            Err(ProbeError::Failed { .. })
+        ));
+        assert!(matches!(
+            inspect_audio_with("true", Path::new("/tmp/never-read.mp4")),
+            Err(ProbeError::NoAudioStream)
+        ));
+    }
 
     #[test]
     fn parses_codec_and_duration() {

@@ -71,11 +71,7 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         }
     }
 
-    if config.audio == AudioMode::Microphone {
-        let device = config
-            .microphone_device
-            .as_deref()
-            .ok_or(ConfigError::MissingAudioDevice)?;
+    if let Some(device) = audio_device(config)? {
         command.arg("-f").arg("pulse").arg("-i").arg(device);
     }
 
@@ -90,7 +86,7 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         .arg("-f")
         .arg(container.ffmpeg_format());
 
-    if config.audio == AudioMode::Microphone {
+    if config.audio != AudioMode::None {
         command
             .arg("-map")
             .arg("0:v:0")
@@ -117,6 +113,24 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
     Ok(command)
 }
 
+/// The resolved pulse source for the selected audio mode.
+fn audio_device(config: &Config) -> Result<Option<&str>, ConfigError> {
+    match config.audio {
+        AudioMode::None => Ok(None),
+        AudioMode::Microphone => config
+            .microphone_device
+            .as_deref()
+            .map(Some)
+            .ok_or(ConfigError::MissingAudioDevice),
+        AudioMode::System => config
+            .system_audio_device
+            .as_deref()
+            .map(Some)
+            .ok_or(ConfigError::MissingSystemAudioDevice),
+        AudioMode::Both => Err(ConfigError::UnsupportedAudioMode(AudioMode::Both)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +146,7 @@ mod tests {
             capture: Capture::FullScreen,
             audio: AudioMode::None,
             microphone_device: None,
+            system_audio_device: None,
         }
     }
 
@@ -229,6 +244,27 @@ mod tests {
         assert_has_pair(&args, "-map", "0:v:0");
         assert_has_pair(&args, "-map", "1:a:0");
         assert_has_pair(&args, "-c:a", "aac");
+    }
+
+    #[test]
+    fn system_audio_adds_the_monitor_input() {
+        let mut cfg = config("clip.mp4");
+        cfg.audio = AudioMode::System;
+        cfg.system_audio_device = Some("sink.monitor".to_owned());
+        let args = args(&command_for(&cfg));
+
+        assert_has_pair(&args, "-f", "pulse");
+        assert_has_pair(&args, "-i", "sink.monitor");
+        assert_has_pair(&args, "-map", "1:a:0");
+    }
+
+    #[test]
+    fn unresolved_system_audio_is_rejected() {
+        let mut cfg = config("clip.mp4");
+        cfg.audio = AudioMode::System;
+
+        let error = build(&cfg).expect_err("system audio must be resolved first");
+        assert_eq!(error, ConfigError::MissingSystemAudioDevice);
     }
 
     #[test]
