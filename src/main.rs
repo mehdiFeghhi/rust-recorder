@@ -149,34 +149,59 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             // checked so a silent no-output run is not reported as success.
             let output = output::verify(&config.output)?;
             let probe = probe::inspect(&config.output)?;
-            let audio_codec = if config.audio == audio::AudioMode::None {
+            let audio_info = if config.audio == audio::AudioMode::None {
                 None
             } else {
-                Some(probe::inspect_audio(&config.output)?.codec)
+                Some(probe::inspect_audio(&config.output)?)
             };
 
             tracing::info!(
                 elapsed_ms = started.elapsed().as_millis() as u64,
                 size = output.size,
                 codec = %probe.codec,
-                audio_codec = ?audio_codec,
+                width = probe.width,
+                height = probe.height,
+                fps = ?probe.fps,
+                audio_codec = ?audio_info.as_ref().map(|audio| audio.codec.as_str()),
                 duration_s = probe.duration,
                 "recording finished"
             );
 
-            let codecs = match &audio_codec {
-                Some(audio) => format!("{} + {audio}", probe.codec),
+            let codecs = match &audio_info {
+                Some(audio) => format!("{} + {}", probe.codec, audio_label(audio)),
                 None => probe.codec.clone(),
             };
             eprintln!(
-                "recording finished: {} ({} bytes, {:.2} s, {})",
+                "recording finished: {} ({}x{} @ {} fps, {}, {:.2} s, {} bytes)",
                 config.output.display(),
-                output.size,
+                probe.width,
+                probe.height,
+                display_fps(probe.fps),
+                codecs,
                 probe.duration,
-                codecs
+                output.size
             );
             Ok(())
         }
+    }
+}
+
+fn display_fps(fps: Option<f64>) -> String {
+    match fps {
+        Some(value) if (value - value.round()).abs() < 0.01 => format!("{value:.0}"),
+        Some(value) => format!("{value:.2}"),
+        None => "?".to_owned(),
+    }
+}
+
+fn audio_label(audio: &probe::AudioInfo) -> String {
+    match (audio.sample_rate, audio.channels) {
+        (Some(rate), Some(2)) => format!("{} {} kHz stereo", audio.codec, rate / 1000),
+        (Some(rate), Some(1)) => format!("{} {} kHz mono", audio.codec, rate / 1000),
+        (Some(rate), Some(channels)) => {
+            format!("{} {} kHz {channels} ch", audio.codec, rate / 1000)
+        }
+        _ => audio.codec.clone(),
     }
 }
 

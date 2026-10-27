@@ -50,8 +50,8 @@ exit 7
 
 const FFPROBE_SUCCEEDS: &str = r#"#!/bin/sh
 case " $* " in
-  *" -select_streams a:0 "*) printf '%s\n' 'codec_name=aac' ;;
-  *) printf '%s\n' 'codec_name=h264' 'duration=1.500000' ;;
+  *" -select_streams a:0 "*) printf '%s\n' 'codec_name=aac' 'channels=2' 'sample_rate=48000' ;;
+  *) printf '%s\n' 'codec_name=h264' 'width=1920' 'height=1200' 'avg_frame_rate=30/1' 'duration=1.500000' ;;
 esac
 exit 0
 "#;
@@ -59,7 +59,7 @@ exit 0
 const FFPROBE_NO_AUDIO: &str = r#"#!/bin/sh
 case " $* " in
   *" -select_streams a:0 "*) exit 0 ;;
-  *) printf '%s\n' 'codec_name=h264' 'duration=1.000000' ;;
+  *) printf '%s\n' 'codec_name=h264' 'width=1920' 'height=1200' 'avg_frame_rate=30/1' 'duration=1.000000' ;;
 esac
 exit 0
 "#;
@@ -485,7 +485,7 @@ fn records_system_audio() {
         "argv: {argv}"
     );
     assert!(
-        stderr(&output).contains("h264 + aac"),
+        stderr(&output).contains("h264 + aac 48 kHz stereo"),
         "stderr: {}",
         stderr(&output)
     );
@@ -548,7 +548,7 @@ fn records_microphone_and_system_audio_mixed() {
     assert!(argv.contains("amix=inputs=2"), "argv: {argv}");
     assert!(argv.contains("-map\n[a]\n"), "argv: {argv}");
     assert!(
-        stderr(&output).contains("h264 + aac"),
+        stderr(&output).contains("h264 + aac 48 kHz stereo"),
         "stderr: {}",
         stderr(&output)
     );
@@ -688,6 +688,10 @@ fn successful_recording_reports_codec_and_duration() {
     let message = stderr(&output);
     assert!(
         message.contains("recording finished"),
+        "unexpected: {message}"
+    );
+    assert!(
+        message.contains("1920x1200 @ 30 fps"),
         "unexpected: {message}"
     );
     assert!(message.contains("h264"), "unexpected: {message}");

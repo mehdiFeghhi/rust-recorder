@@ -22,7 +22,7 @@ Development is organized into small, reviewable milestones:
   integration tests, and release. *(merged)*
 - **Phase 3 — Capture configuration:** rectangular regions, monitor discovery
   and selection, and interactive selection. *(merged)*
-- **Phase 4 — Audio:** source discovery, selection, and recording. *(current: M5.4 mixed microphone + system audio)*
+- **Phase 4 — Audio:** source discovery, selection, and recording. *(current: Phase 6.1 richer recording summary)*
 - **Later milestones:** GUI development and Wayland support.
 
 The current milestone must be confirmed from the task instructions and

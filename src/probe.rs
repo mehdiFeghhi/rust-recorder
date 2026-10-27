@@ -17,6 +17,10 @@ pub const FFPROBE_PROGRAM: &str = "ffprobe";
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProbeInfo {
     pub codec: String,
+    pub width: u32,
+    pub height: u32,
+    /// Average frame rate, or `None` when the container reports `0/0`.
+    pub fps: Option<f64>,
     pub duration: f64,
 }
 
@@ -29,6 +33,8 @@ pub enum ProbeError {
     Failed { status: ExitStatus, stderr: String },
     /// The container has no readable video stream.
     NoVideoStream,
+    /// The video stream has no usable width or height.
+    MissingDimensions,
     /// The container has no readable audio stream.
     NoAudioStream,
     /// `ffprobe` did not report a duration.
@@ -60,6 +66,7 @@ impl fmt::Display for ProbeError {
                 }
             }
             Self::NoVideoStream => write!(f, "the recording contains no video stream"),
+            Self::MissingDimensions => write!(f, "the recording has no usable video dimensions"),
             Self::NoAudioStream => write!(f, "the recording contains no audio stream"),
             Self::MissingDuration => write!(f, "ffprobe reported no duration"),
             Self::InvalidDuration(value) => {
@@ -78,6 +85,7 @@ impl Error for ProbeError {
             Self::Spawn { source } => Some(source),
             Self::Failed { .. }
             | Self::NoVideoStream
+            | Self::MissingDimensions
             | Self::NoAudioStream
             | Self::MissingDuration
             | Self::InvalidDuration(_)
@@ -90,6 +98,8 @@ impl Error for ProbeError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioInfo {
     pub codec: String,
+    pub channels: Option<u32>,
+    pub sample_rate: Option<u32>,
 }
 
 /// Probe the audio stream at `path` with the system `ffprobe`.
@@ -105,7 +115,7 @@ pub(crate) fn inspect_audio_with(program: &str, path: &Path) -> Result<AudioInfo
             "-select_streams",
             "a:0",
             "-show_entries",
-            "stream=codec_name",
+            "stream=codec_name,channels,sample_rate",
             "-of",
             "default=noprint_wrappers=1",
         ])
@@ -124,15 +134,30 @@ pub(crate) fn inspect_audio_with(program: &str, path: &Path) -> Result<AudioInfo
 }
 
 fn parse_audio(stdout: &str) -> Result<AudioInfo, ProbeError> {
-    let codec = stdout
-        .lines()
-        .find_map(|line| line.strip_prefix("codec_name="))
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && *value != "unknown")
-        .map(str::to_owned)
-        .ok_or(ProbeError::NoAudioStream)?;
+    let mut codec = None;
+    let mut channels = None;
+    let mut sample_rate = None;
 
-    Ok(AudioInfo { codec })
+    for line in stdout.lines() {
+        if let Some(value) = line.strip_prefix("codec_name=") {
+            let value = value.trim();
+            if !value.is_empty() && value != "unknown" {
+                codec = Some(value.to_owned());
+            }
+        } else if let Some(value) = line.strip_prefix("channels=") {
+            channels = value.trim().parse().ok();
+        } else if let Some(value) = line.strip_prefix("sample_rate=") {
+            sample_rate = value.trim().parse().ok();
+        }
+    }
+
+    let codec = codec.ok_or(ProbeError::NoAudioStream)?;
+
+    Ok(AudioInfo {
+        codec,
+        channels,
+        sample_rate,
+    })
 }
 
 /// Probe the recording at `path` with the system `ffprobe`.
@@ -149,7 +174,7 @@ pub(crate) fn inspect_with(program: &str, path: &Path) -> Result<ProbeInfo, Prob
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=codec_name",
+            "stream=codec_name,width,height,avg_frame_rate",
             "-show_entries",
             "format=duration",
             "-of",
@@ -172,6 +197,9 @@ pub(crate) fn inspect_with(program: &str, path: &Path) -> Result<ProbeInfo, Prob
 /// Parse the `key=value` lines emitted by the `default` output format.
 fn parse(stdout: &str) -> Result<ProbeInfo, ProbeError> {
     let mut codec = None;
+    let mut width = None;
+    let mut height = None;
+    let mut fps = None;
     let mut duration = None;
 
     for line in stdout.lines() {
@@ -180,6 +208,12 @@ fn parse(stdout: &str) -> Result<ProbeInfo, ProbeError> {
             if !value.is_empty() && value != "unknown" {
                 codec = Some(value.to_owned());
             }
+        } else if let Some(value) = line.strip_prefix("width=") {
+            width = value.trim().parse().ok();
+        } else if let Some(value) = line.strip_prefix("height=") {
+            height = value.trim().parse().ok();
+        } else if let Some(value) = line.strip_prefix("avg_frame_rate=") {
+            fps = parse_fps(value.trim());
         } else if let Some(value) = line.strip_prefix("duration=") {
             duration = Some(value.trim());
         }
@@ -195,7 +229,29 @@ fn parse(stdout: &str) -> Result<ProbeInfo, ProbeError> {
         return Err(ProbeError::NonPositiveDuration(duration));
     }
 
-    Ok(ProbeInfo { codec, duration })
+    let width = width.ok_or(ProbeError::MissingDimensions)?;
+    let height = height.ok_or(ProbeError::MissingDimensions)?;
+
+    Ok(ProbeInfo {
+        codec,
+        width,
+        height,
+        fps,
+        duration,
+    })
+}
+
+/// Parse `avg_frame_rate` such as `30/1`; `0/0` means unknown.
+fn parse_fps(value: &str) -> Option<f64> {
+    let (numerator, denominator) = value.split_once('/')?;
+    let numerator: f64 = numerator.parse().ok()?;
+    let denominator: f64 = denominator.parse().ok()?;
+
+    if numerator == 0.0 || denominator == 0.0 {
+        return None;
+    }
+
+    Some(numerator / denominator)
 }
 
 #[cfg(test)]
@@ -205,9 +261,11 @@ mod tests {
     #[test]
     fn parses_the_audio_codec() {
         assert_eq!(
-            parse_audio("codec_name=aac\n").expect("audio codec"),
+            parse_audio("codec_name=aac\nchannels=2\nsample_rate=48000\n").expect("audio codec"),
             AudioInfo {
-                codec: "aac".to_owned()
+                codec: "aac".to_owned(),
+                channels: Some(2),
+                sample_rate: Some(48_000),
             }
         );
     }
@@ -235,10 +293,28 @@ mod tests {
     }
 
     #[test]
-    fn parses_codec_and_duration() {
-        let info = parse("codec_name=h264\nduration=1.500000\n").expect("valid output");
+    fn parses_codec_geometry_fps_and_duration() {
+        let stdout = "codec_name=h264\nwidth=1920\nheight=1200\navg_frame_rate=30000/1001\nduration=1.500000\n";
+        let info = parse(stdout).expect("valid output");
+
         assert_eq!(info.codec, "h264");
+        assert_eq!((info.width, info.height), (1920, 1200));
+        assert!((info.fps.expect("fps") - 29.97).abs() < 0.01);
         assert_eq!(info.duration, 1.5);
+    }
+
+    #[test]
+    fn unknown_frame_rate_is_none() {
+        let info =
+            parse("codec_name=h264\nwidth=1920\nheight=1200\navg_frame_rate=0/0\nduration=1.0\n")
+                .expect("valid output");
+        assert_eq!(info.fps, None);
+    }
+
+    #[test]
+    fn rejects_missing_dimensions() {
+        let error = parse("codec_name=h264\nduration=1.0\n").expect_err("no dimensions");
+        assert!(matches!(error, ProbeError::MissingDimensions));
     }
 
     #[test]
@@ -268,7 +344,7 @@ mod tests {
     #[test]
     fn rejects_zero_and_negative_durations() {
         for raw in ["0.0", "-1.5"] {
-            let output = format!("codec_name=h264\nduration={raw}\n");
+            let output = format!("codec_name=h264\nwidth=1920\nheight=1200\nduration={raw}\n");
             let error = parse(&output).expect_err("non-positive duration must fail");
             assert!(matches!(error, ProbeError::NonPositiveDuration(_)));
         }
