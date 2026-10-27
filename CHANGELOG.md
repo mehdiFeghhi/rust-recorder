@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Faster audio startup: pulse inputs use a 1024-frame fragment, cutting the
+  delay before recording begins from several seconds to about one.
 - Audio-only recording: `--audio-only` captures just the microphone and/or
   system audio, with no screen input.
 - Richer recording summary: resolution, frame rate, video codec, audio codec
