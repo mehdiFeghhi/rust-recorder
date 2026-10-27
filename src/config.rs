@@ -34,6 +34,7 @@ pub struct Config {
     pub audio: AudioMode,
     pub microphone_device: Option<String>,
     pub system_audio_device: Option<String>,
+    pub audio_only: bool,
 }
 
 /// Output container selected from the validated output extension.
@@ -99,6 +100,8 @@ pub enum ConfigError {
     InvalidAudioMode(String),
     AudioDeviceWithoutMode,
     SystemDeviceWithoutMode,
+    AudioOnlyRequiresAudio,
+    AudioOnlyWithCapture,
     MissingAudioDevice,
     MissingSystemAudioDevice,
 }
@@ -139,6 +142,7 @@ impl Config {
         let mut audio = AudioMode::None;
         let mut microphone_device: Option<String> = None;
         let mut system_audio_device: Option<String> = None;
+        let mut audio_only = false;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -169,6 +173,7 @@ impl Config {
                 }
                 "-V" | "--version" => return Ok(ParseResult::Version),
                 "--select-region" => select_region = true,
+                "--audio-only" => audio_only = true,
                 "--audio" => {
                     let raw = next_value(&mut args, "--audio")?;
                     let text = raw.to_str().ok_or_else(|| {
@@ -252,6 +257,7 @@ impl Config {
             audio,
             microphone_device,
             system_audio_device,
+            audio_only,
         };
         config.validate()?;
         Ok(ParseResult::Run(config))
@@ -283,6 +289,15 @@ impl Config {
             && !matches!(self.audio, AudioMode::System | AudioMode::Both)
         {
             return Err(ConfigError::SystemDeviceWithoutMode);
+        }
+
+        if self.audio_only {
+            if self.audio == AudioMode::None {
+                return Err(ConfigError::AudioOnlyRequiresAudio);
+            }
+            if self.capture != Capture::FullScreen {
+                return Err(ConfigError::AudioOnlyWithCapture);
+            }
         }
 
         validate_display(&self.display)?;
@@ -390,6 +405,15 @@ impl fmt::Display for ConfigError {
             }
             Self::SystemDeviceWithoutMode => {
                 write!(f, "--system-audio-device requires --audio system or both")
+            }
+            Self::AudioOnlyRequiresAudio => {
+                write!(f, "--audio-only requires --audio mic, system, or both")
+            }
+            Self::AudioOnlyWithCapture => {
+                write!(
+                    f,
+                    "--audio-only cannot be combined with --region, --monitor, or --select-region"
+                )
             }
             Self::MissingSystemAudioDevice => write!(
                 f,
@@ -772,6 +796,31 @@ mod tests {
         assert_eq!(config.system_audio_device.as_deref(), Some("sink.monitor"));
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn audio_only_requires_an_audio_mode() {
+        assert_eq!(
+            parse(&["--output", "out.mp4", "--audio-only"]).unwrap_err(),
+            ConfigError::AudioOnlyRequiresAudio
+        );
+    }
+
+    #[test]
+    fn audio_only_rejects_screen_capture_options() {
+        assert_eq!(
+            parse(&[
+                "--output",
+                "out.mp4",
+                "--audio-only",
+                "--audio",
+                "mic",
+                "--region",
+                "640x480+0+0",
+            ])
+            .unwrap_err(),
+            ConfigError::AudioOnlyWithCapture
+        );
     }
 
     #[test]

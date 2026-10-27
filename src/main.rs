@@ -148,39 +148,61 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             // Only reached after FFmpeg exits successfully; the file is then
             // checked so a silent no-output run is not reported as success.
             let output = output::verify(&config.output)?;
-            let probe = probe::inspect(&config.output)?;
-            let audio_info = if config.audio == audio::AudioMode::None {
-                None
+
+            if config.audio_only {
+                let audio = probe::inspect_audio(&config.output)?;
+
+                tracing::info!(
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    size = output.size,
+                    audio_codec = %audio.codec,
+                    duration_s = audio.duration,
+                    "recording finished"
+                );
+
+                eprintln!(
+                    "recording finished: {} ({}, {:.2} s, {} bytes)",
+                    config.output.display(),
+                    audio_label(&audio),
+                    audio.duration,
+                    output.size
+                );
             } else {
-                Some(probe::inspect_audio(&config.output)?)
-            };
+                let probe = probe::inspect(&config.output)?;
+                let audio_info = if config.audio == audio::AudioMode::None {
+                    None
+                } else {
+                    Some(probe::inspect_audio(&config.output)?)
+                };
 
-            tracing::info!(
-                elapsed_ms = started.elapsed().as_millis() as u64,
-                size = output.size,
-                codec = %probe.codec,
-                width = probe.width,
-                height = probe.height,
-                fps = ?probe.fps,
-                audio_codec = ?audio_info.as_ref().map(|audio| audio.codec.as_str()),
-                duration_s = probe.duration,
-                "recording finished"
-            );
+                tracing::info!(
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    size = output.size,
+                    codec = %probe.codec,
+                    width = probe.width,
+                    height = probe.height,
+                    fps = ?probe.fps,
+                    audio_codec = ?audio_info.as_ref().map(|audio| audio.codec.as_str()),
+                    duration_s = probe.duration,
+                    "recording finished"
+                );
 
-            let codecs = match &audio_info {
-                Some(audio) => format!("{} + {}", probe.codec, audio_label(audio)),
-                None => probe.codec.clone(),
-            };
-            eprintln!(
-                "recording finished: {} ({}x{} @ {} fps, {}, {:.2} s, {} bytes)",
-                config.output.display(),
-                probe.width,
-                probe.height,
-                display_fps(probe.fps),
-                codecs,
-                probe.duration,
-                output.size
-            );
+                let codecs = match &audio_info {
+                    Some(audio) => format!("{} + {}", probe.codec, audio_label(audio)),
+                    None => probe.codec.clone(),
+                };
+                eprintln!(
+                    "recording finished: {} ({}x{} @ {} fps, {}, {:.2} s, {} bytes)",
+                    config.output.display(),
+                    probe.width,
+                    probe.height,
+                    display_fps(probe.fps),
+                    codecs,
+                    probe.duration,
+                    output.size
+                );
+            }
+
             Ok(())
         }
     }
@@ -223,6 +245,7 @@ OPTIONS:
         --list-monitors        List connected monitors and exit
         --list-audio-devices   List audio capture sources and exit
         --audio <MODE>         Audio mode: none, mic, system, or both [default: none]
+        --audio-only           Record audio without screen capture
         --microphone-device <ID>  Microphone source ID from --list-audio-devices
         --system-audio-device <ID>  Output-monitor source ID from --list-audio-devices
         --monitor <N>          Capture the Nth monitor from --list-monitors

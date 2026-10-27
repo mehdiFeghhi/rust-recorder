@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Audio-only recording: `--audio-only` captures just the microphone and/or
+  system audio, with no screen input.
 - Richer recording summary: resolution, frame rate, video codec, audio codec
   with sample rate and channel layout, duration, and size.
 - Mixed audio: `--audio both` records microphone and system audio into one
