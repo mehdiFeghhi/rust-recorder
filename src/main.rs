@@ -66,12 +66,24 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             Ok(())
         }
         ParseResult::Run(mut config) => {
-            if config.audio == audio::AudioMode::Microphone {
-                let sources = audio::discover()?;
-                let selected =
-                    audio::select_microphone(config.microphone_device.as_deref(), &sources)?;
-                tracing::info!(device = %selected.id, "using microphone");
-                config.microphone_device = Some(selected.id);
+            match config.audio {
+                audio::AudioMode::Microphone => {
+                    let sources = audio::discover()?;
+                    let selected =
+                        audio::select_microphone(config.microphone_device.as_deref(), &sources)?;
+                    tracing::info!(device = %selected.id, "using microphone");
+                    config.microphone_device = Some(selected.id);
+                }
+                audio::AudioMode::System => {
+                    let sources = audio::discover()?;
+                    let selected = audio::select_system_output(
+                        config.system_audio_device.as_deref(),
+                        &sources,
+                    )?;
+                    tracing::info!(device = %selected.id, "using system audio");
+                    config.system_audio_device = Some(selected.id);
+                }
+                audio::AudioMode::None | audio::AudioMode::Both => {}
             }
 
             // Monitor indices and explicit regions are resolved against the
@@ -121,21 +133,31 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             // checked so a silent no-output run is not reported as success.
             let output = output::verify(&config.output)?;
             let probe = probe::inspect(&config.output)?;
+            let audio_codec = if config.audio == audio::AudioMode::None {
+                None
+            } else {
+                Some(probe::inspect_audio(&config.output)?.codec)
+            };
 
             tracing::info!(
                 elapsed_ms = started.elapsed().as_millis() as u64,
                 size = output.size,
                 codec = %probe.codec,
+                audio_codec = ?audio_codec,
                 duration_s = probe.duration,
                 "recording finished"
             );
 
+            let codecs = match &audio_codec {
+                Some(audio) => format!("{} + {audio}", probe.codec),
+                None => probe.codec.clone(),
+            };
             eprintln!(
                 "recording finished: {} ({} bytes, {:.2} s, {})",
                 config.output.display(),
                 output.size,
                 probe.duration,
-                probe.codec
+                codecs
             );
             Ok(())
         }
@@ -159,8 +181,9 @@ OPTIONS:
         --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
         --list-monitors        List connected monitors and exit
         --list-audio-devices   List audio capture sources and exit
-        --audio <MODE>         Audio mode: none or mic [default: none]
+        --audio <MODE>         Audio mode: none, mic, or system [default: none]
         --microphone-device <ID>  Microphone source ID from --list-audio-devices
+        --system-audio-device <ID>  Output-monitor source ID from --list-audio-devices
         --monitor <N>          Capture the Nth monitor from --list-monitors
         --select-region        Select the region with the mouse, then record
     -h, --help                 Print this help

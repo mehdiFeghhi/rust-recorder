@@ -15,6 +15,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard};
+
+/// Serialises tests: writing an executable while another test forks can make
+/// `exec` fail with ETXTBSY. These tests are fast, so running them one at a
+/// time is cheaper than working around that race.
+static SERIAL: Mutex<()> = Mutex::new(());
 
 /// Path to the binary under test, provided by Cargo for integration tests.
 const BIN: &str = env!("CARGO_BIN_EXE_rust-recorder");
@@ -43,7 +49,18 @@ exit 7
 "#;
 
 const FFPROBE_SUCCEEDS: &str = r#"#!/bin/sh
-printf '%s\n' 'codec_name=h264' 'duration=1.500000'
+case " $* " in
+  *" -select_streams a:0 "*) printf '%s\n' 'codec_name=aac' ;;
+  *) printf '%s\n' 'codec_name=h264' 'duration=1.500000' ;;
+esac
+exit 0
+"#;
+
+const FFPROBE_NO_AUDIO: &str = r#"#!/bin/sh
+case " $* " in
+  *" -select_streams a:0 "*) exit 0 ;;
+  *) printf '%s\n' 'codec_name=h264' 'duration=1.000000' ;;
+esac
 exit 0
 "#;
 
@@ -73,10 +90,14 @@ printf '%s\n' \
 
 struct TempDir {
     path: PathBuf,
+    _serial: MutexGuard<'static, ()>,
 }
 
 impl TempDir {
     fn new(label: &str) -> Self {
+        let serial = SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
@@ -84,7 +105,10 @@ impl TempDir {
             std::process::id()
         ));
         fs::create_dir_all(&path).expect("create temporary test directory");
-        Self { path }
+        Self {
+            path,
+            _serial: serial,
+        }
     }
 
     fn path(&self) -> &Path {
@@ -420,6 +444,75 @@ fn defaults_to_the_first_microphone() {
         }),
         "argv: {argv}"
     );
+}
+
+#[test]
+fn records_system_audio() {
+    let dir = TempDir::new("system-audio");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let args_file = dir.join("ffmpeg-args.txt");
+    let fake_ffmpeg = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nlast=\"\"\nfor argument in \"$@\"; do last=\"$argument\"; done\nprintf 'payload' > \"$last\"\nexit 0\n",
+        args_file.display()
+    );
+    write_script(dir.path(), "ffmpeg", &fake_ffmpeg);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio",
+            "system",
+            "--system-audio-device",
+            "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+
+    let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
+    let lines: Vec<&str> = argv.lines().collect();
+    assert!(
+        lines.windows(2).any(|pair| {
+            pair[0] == "-i" && pair[1] == "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor"
+        }),
+        "argv: {argv}"
+    );
+    assert!(
+        stderr(&output).contains("h264 + aac"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn missing_audio_stream_is_rejected() {
+    let dir = TempDir::new("no-audio-stream");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+    write_script(dir.path(), "ffmpeg", FFMPEG_WRITES_FILE);
+    write_script(dir.path(), "ffprobe", FFPROBE_NO_AUDIO);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio",
+            "mic",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("no audio stream"));
 }
 
 #[test]
