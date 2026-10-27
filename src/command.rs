@@ -32,72 +32,88 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         .arg("error")
         .arg("-nostats");
 
-    match &config.capture {
-        // Omitting -video_size makes x11grab capture the whole screen.
-        Capture::FullScreen => {
-            command
-                .arg("-f")
-                .arg("x11grab")
-                .arg("-framerate")
-                .arg(config.fps.to_string())
-                .arg("-i")
-                .arg(&config.display);
-        }
-        Capture::Region(region) => {
-            command
-                .arg("-f")
-                .arg("x11grab")
-                .arg("-video_size")
-                .arg(region.video_size())
-                .arg("-framerate")
-                .arg(config.fps.to_string())
-                .arg("-i")
-                .arg(format!("{}{}", config.display, region.offset()));
-        }
-        Capture::SelectRegion => {
-            command
-                .arg("-f")
-                .arg("x11grab")
-                .arg("-framerate")
-                .arg(config.fps.to_string())
-                .arg("-select_region")
-                .arg("1")
-                .arg("-i")
-                .arg(&config.display);
-        }
-        Capture::Monitor(index) => {
-            // `main` resolves monitor selection before building the command.
-            return Err(ConfigError::MonitorNotResolved(*index));
+    let audio_devices = audio_devices(config)?;
+
+    if !config.audio_only {
+        match &config.capture {
+            // Omitting -video_size makes x11grab capture the whole screen.
+            Capture::FullScreen => {
+                command
+                    .arg("-f")
+                    .arg("x11grab")
+                    .arg("-framerate")
+                    .arg(config.fps.to_string())
+                    .arg("-i")
+                    .arg(&config.display);
+            }
+            Capture::Region(region) => {
+                command
+                    .arg("-f")
+                    .arg("x11grab")
+                    .arg("-video_size")
+                    .arg(region.video_size())
+                    .arg("-framerate")
+                    .arg(config.fps.to_string())
+                    .arg("-i")
+                    .arg(format!("{}{}", config.display, region.offset()));
+            }
+            Capture::SelectRegion => {
+                command
+                    .arg("-f")
+                    .arg("x11grab")
+                    .arg("-framerate")
+                    .arg(config.fps.to_string())
+                    .arg("-select_region")
+                    .arg("1")
+                    .arg("-i")
+                    .arg(&config.display);
+            }
+            Capture::Monitor(index) => {
+                // `main` resolves monitor selection before building the command.
+                return Err(ConfigError::MonitorNotResolved(*index));
+            }
         }
     }
 
-    let audio_devices = audio_devices(config)?;
     for device in &audio_devices {
         command.arg("-f").arg("pulse").arg("-i").arg(device);
     }
 
-    command
-        // Output: H.264 that plays everywhere, in the selected container.
-        .arg("-c:v")
-        .arg("libx264")
-        .arg("-preset")
-        .arg(X264_PRESET)
-        .arg("-pix_fmt")
-        .arg("yuv420p")
-        .arg("-f")
-        .arg(container.ffmpeg_format());
+    if !config.audio_only {
+        command
+            // Output: H.264 that plays everywhere, in the selected container.
+            .arg("-c:v")
+            .arg("libx264")
+            .arg("-preset")
+            .arg(X264_PRESET)
+            .arg("-pix_fmt")
+            .arg("yuv420p");
+    }
+
+    command.arg("-f").arg(container.ffmpeg_format());
+
+    // Input 0 is the video unless we are recording audio only; audio streams
+    // follow it.
+    let first_audio = if config.audio_only { 0 } else { 1 };
+
+    // Only map explicitly when there is audio to keep in sync with; a
+    // video-only command keeps FFmpeg's default stream selection.
+    if !config.audio_only && !audio_devices.is_empty() {
+        command.arg("-map").arg("0:v:0");
+    }
 
     match audio_devices.len() {
         0 => {}
         1 => {
-            command.arg("-map").arg("0:v:0").arg("-map").arg("1:a:0");
+            command.arg("-map").arg(format!("{first_audio}:a:0"));
         }
         _ => {
+            let second_audio = first_audio + 1;
             command
                 .arg("-filter_complex")
-                .arg("[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0[a]")
-                .arg("-map")
-                .arg("0:v:0")
+                .arg(format!(
+                    "[{first_audio}:a][{second_audio}:a]amix=inputs=2:duration=longest:dropout_transition=0[a]"
+                ))
                 .arg("-map")
                 .arg("[a]");
         }
@@ -171,6 +187,7 @@ mod tests {
             audio: AudioMode::None,
             microphone_device: None,
             system_audio_device: None,
+            audio_only: false,
         }
     }
 
@@ -280,6 +297,39 @@ mod tests {
         assert_has_pair(&args, "-f", "pulse");
         assert_has_pair(&args, "-i", "sink.monitor");
         assert_has_pair(&args, "-map", "1:a:0");
+    }
+
+    #[test]
+    fn audio_only_microphone_has_no_video_input() {
+        let mut cfg = config("voice.mp4");
+        cfg.audio = AudioMode::Microphone;
+        cfg.microphone_device = Some("mic.input".to_owned());
+        cfg.audio_only = true;
+        let args = args(&command_for(&cfg));
+
+        assert!(!args.iter().any(|arg| arg == "x11grab"));
+        assert!(!args.iter().any(|arg| arg == "-c:v"));
+        assert_has_pair(&args, "-f", "pulse");
+        assert_has_pair(&args, "-i", "mic.input");
+        assert_has_pair(&args, "-map", "0:a:0");
+    }
+
+    #[test]
+    fn audio_only_both_mixes_from_input_zero() {
+        let mut cfg = config("voice.mp4");
+        cfg.audio = AudioMode::Both;
+        cfg.microphone_device = Some("mic.input".to_owned());
+        cfg.system_audio_device = Some("sink.monitor".to_owned());
+        cfg.audio_only = true;
+        let args = args(&command_for(&cfg));
+
+        assert!(!args.iter().any(|arg| arg == "x11grab"));
+        assert!(
+            args.iter()
+                .any(|arg| arg.contains("[0:a][1:a]") && arg.contains("amix=inputs=2")),
+            "argv: {args:?}"
+        );
+        assert_has_pair(&args, "-map", "[a]");
     }
 
     #[test]

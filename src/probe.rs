@@ -95,11 +95,13 @@ impl Error for ProbeError {
 }
 
 /// Codec of the first audio stream.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AudioInfo {
     pub codec: String,
     pub channels: Option<u32>,
     pub sample_rate: Option<u32>,
+    /// Container duration, used for audio-only recordings.
+    pub duration: f64,
 }
 
 /// Probe the audio stream at `path` with the system `ffprobe`.
@@ -116,6 +118,8 @@ pub(crate) fn inspect_audio_with(program: &str, path: &Path) -> Result<AudioInfo
             "a:0",
             "-show_entries",
             "stream=codec_name,channels,sample_rate",
+            "-show_entries",
+            "format=duration",
             "-of",
             "default=noprint_wrappers=1",
         ])
@@ -137,6 +141,7 @@ fn parse_audio(stdout: &str) -> Result<AudioInfo, ProbeError> {
     let mut codec = None;
     let mut channels = None;
     let mut sample_rate = None;
+    let mut duration = None;
 
     for line in stdout.lines() {
         if let Some(value) = line.strip_prefix("codec_name=") {
@@ -148,15 +153,26 @@ fn parse_audio(stdout: &str) -> Result<AudioInfo, ProbeError> {
             channels = value.trim().parse().ok();
         } else if let Some(value) = line.strip_prefix("sample_rate=") {
             sample_rate = value.trim().parse().ok();
+        } else if let Some(value) = line.strip_prefix("duration=") {
+            duration = Some(value.trim());
         }
     }
 
     let codec = codec.ok_or(ProbeError::NoAudioStream)?;
+    let raw = duration.ok_or(ProbeError::MissingDuration)?;
+    let duration: f64 = raw
+        .parse()
+        .map_err(|_| ProbeError::InvalidDuration(raw.to_owned()))?;
+
+    if !duration.is_finite() || duration <= 0.0 {
+        return Err(ProbeError::NonPositiveDuration(duration));
+    }
 
     Ok(AudioInfo {
         codec,
         channels,
         sample_rate,
+        duration,
     })
 }
 
@@ -261,11 +277,13 @@ mod tests {
     #[test]
     fn parses_the_audio_codec() {
         assert_eq!(
-            parse_audio("codec_name=aac\nchannels=2\nsample_rate=48000\n").expect("audio codec"),
+            parse_audio("codec_name=aac\nchannels=2\nsample_rate=48000\nduration=1.500000\n")
+                .expect("audio codec"),
             AudioInfo {
                 codec: "aac".to_owned(),
                 channels: Some(2),
                 sample_rate: Some(48_000),
+                duration: 1.5,
             }
         );
     }

@@ -50,7 +50,7 @@ exit 7
 
 const FFPROBE_SUCCEEDS: &str = r#"#!/bin/sh
 case " $* " in
-  *" -select_streams a:0 "*) printf '%s\n' 'codec_name=aac' 'channels=2' 'sample_rate=48000' ;;
+  *" -select_streams a:0 "*) printf '%s\n' 'codec_name=aac' 'channels=2' 'sample_rate=48000' 'duration=1.500000' ;;
   *) printf '%s\n' 'codec_name=h264' 'width=1920' 'height=1200' 'avg_frame_rate=30/1' 'duration=1.500000' ;;
 esac
 exit 0
@@ -552,6 +552,42 @@ fn records_microphone_and_system_audio_mixed() {
         "stderr: {}",
         stderr(&output)
     );
+}
+
+#[test]
+fn records_audio_only() {
+    let dir = TempDir::new("audio-only");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let args_file = dir.join("ffmpeg-args.txt");
+    let fake_ffmpeg = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nlast=\"\"\nfor argument in \"$@\"; do last=\"$argument\"; done\nprintf 'payload' > \"$last\"\nexit 0\n",
+        args_file.display()
+    );
+    write_script(dir.path(), "ffmpeg", &fake_ffmpeg);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("voice.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio-only",
+            "--audio",
+            "mic",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
+    assert!(!argv.contains("x11grab"), "argv: {argv}");
+    assert!(argv.contains("-map\n0:a:0\n"), "argv: {argv}");
+    let message = stderr(&output);
+    assert!(message.contains("aac 48 kHz stereo"), "stderr: {message}");
+    assert!(!message.contains("1920x1200"), "stderr: {message}");
 }
 
 #[test]
