@@ -46,16 +46,6 @@ impl AudioMode {
             _ => None,
         }
     }
-
-    /// The CLI spelling, for error messages.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Microphone => "mic",
-            Self::System => "system",
-            Self::Both => "both",
-        }
-    }
 }
 
 /// One capture source with stable metadata.
@@ -121,9 +111,10 @@ impl fmt::Display for AudioError {
                 f,
                 "{requested:?} is not an output monitor, not usable for system audio"
             ),
-            Self::NoMicrophone => {
-                write!(f, "no microphone sources found; run --list-audio-devices")
-            }
+            Self::NoMicrophone => write!(
+                f,
+                "no microphone sources found; run --list-audio-devices. For a Bluetooth headset, switch it to its headset (HFP) profile first: A2DP exposes output only"
+            ),
             Self::NoSystemOutput => write!(
                 f,
                 "no output-monitor sources found; system audio is unavailable"

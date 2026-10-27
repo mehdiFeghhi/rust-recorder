@@ -516,6 +516,45 @@ fn missing_audio_stream_is_rejected() {
 }
 
 #[test]
+fn records_microphone_and_system_audio_mixed() {
+    let dir = TempDir::new("audio-both");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let args_file = dir.join("ffmpeg-args.txt");
+    let fake_ffmpeg = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nlast=\"\"\nfor argument in \"$@\"; do last=\"$argument\"; done\nprintf 'payload' > \"$last\"\nexit 0\n",
+        args_file.display()
+    );
+    write_script(dir.path(), "ffmpeg", &fake_ffmpeg);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio",
+            "both",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+
+    let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
+    assert_eq!(argv.matches("pulse").count(), 2, "argv: {argv}");
+    assert!(argv.contains("amix=inputs=2"), "argv: {argv}");
+    assert!(argv.contains("-map\n[a]\n"), "argv: {argv}");
+    assert!(
+        stderr(&output).contains("h264 + aac"),
+        "stderr: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn configuration_errors_exit_with_two() {
     let dir = TempDir::new("config");
     let output = run(dir.path(), &[]);

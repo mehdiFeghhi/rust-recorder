@@ -64,6 +64,9 @@ rust-recorder --audio mic --microphone-device <ID> --output /tmp/mic.mp4
 # Record system audio (an output-monitor source)
 rust-recorder --audio system --output /tmp/system.mp4
 
+# Record microphone and system audio mixed into one track
+rust-recorder --audio both --output /tmp/both.mp4
+
 # Record the first monitor
 rust-recorder --monitor 0 --output /tmp/monitor.mp4
 
