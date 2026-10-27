@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ## [Unreleased]
 
+### Changed
+
+- Documented the supported environment, system dependencies, and
+  troubleshooting (Bluetooth profiles, audio startup, empty early stops).
+
 ### Added
 
 - Faster audio startup: pulse inputs use a 1024-frame fragment, cutting the

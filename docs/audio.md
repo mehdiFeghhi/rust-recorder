@@ -73,6 +73,11 @@ pub struct AudioSource {
   everything else is a `Microphone`. This is the PulseAudio convention and is
   also used by PipeWire's compatibility layer.
 
+## Environment
+
+Tested with PipeWire's PulseAudio compatibility layer on Pop!_OS 22.04. The
+same commands apply to PulseAudio; other configurations are untested.
+
 ## Discovery
 
 Commands:

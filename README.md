@@ -2,30 +2,41 @@
 
 A desktop screen recorder for Linux, built in Rust on top of FFmpeg.
 
-> **Status: Phase 1 — command-line prototype (in progress).**
-> The CLI validates arguments, builds an FFmpeg `x11grab` command, runs it to
-> completion, finalizes the file gracefully on Ctrl-C, verifies the file, and
-> probes it with `ffprobe` for a video stream and a positive duration. Audio is
-> not implemented yet.
+> **Status: v0.2.0 release candidate.**
+> Command-line recorder for Linux/X11 with video, microphone, system-audio,
+> mixed, and audio-only modes, plus graceful Ctrl-C finalization, output
+> probing, and structured diagnostics.
 
 ## Scope
 
-Planned for the first usable release:
+What works today:
 
-- Capture one X11 display to a video file using FFmpeg.
-- A small command-line interface for output path, frame rate, and duration.
+- Full-screen capture, explicit rectangles, monitor selection, and interactive
+  region selection on X11.
+- H.264/yuv420p video in MP4 or MKV.
+- Microphone, system audio, or both mixed into one AAC track; audio-only mode.
+- Graceful Ctrl-C finalization, output verification, `ffprobe` checks, and
+  structured diagnostics via `RUST_LOG`.
 
-Explicitly out of scope for now: audio capture, GUI, streaming, Wayland, and
-multi-monitor composition.
+Explicitly out of scope for now: GUI, Wayland, streaming, separate audio
+tracks, and multi-monitor composition.
 
 ## Requirements
 
 | Dependency | Version | Notes |
 | --- | --- | --- |
 | Rust | 1.91.0 (pinned) | Installed automatically by `rustup` from `rust-toolchain.toml` |
-| FFmpeg | 4.4.2 (system) | Required at runtime for recording and probing (`ffprobe`) |
-| Linux | x86_64, X11 | Only supported target |
+| FFmpeg | 4.4.2+ | Needs `x11grab`, `libx264`, the `pulse` input, and `ffprobe` |
 | xrandr | system utility | Monitor discovery and region bounds validation |
+| pactl | `pulseaudio-utils` or `pipewire-pulse` | Audio source discovery and device selection |
+| Linux | x86_64, X11 | Only supported target |
+
+## Supported environment
+
+Tested on Pop!_OS 22.04 with GNOME on X11, PipeWire's PulseAudio compatibility
+layer, and FFmpeg 4.4.2. Other X11 distributions with FFmpeg and a
+PulseAudio-compatible server should work, but are untested. Wayland is not
+supported.
 
 ## Getting started
 
@@ -127,21 +138,36 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 - [docs/audio.md](docs/audio.md) — audio subsystem design
 - [AGENTS.md](AGENTS.md) — instructions for AI coding agents
 
+## Troubleshooting
+
+- `could not start xrandr` — install `x11-xserver-utils`.
+- `could not start pactl` — install `pulseaudio-utils` or `pipewire-pulse`.
+- **Bluetooth headset has no microphone** — A2DP provides output only. Switch
+  the card to an HFP profile, then restore A2DP afterwards; see
+  [docs/audio.md](docs/audio.md#bluetooth-headsets).
+- **Recording starts after about a second** — FFmpeg/PulseAudio input startup;
+  this is expected.
+- **Stopping immediately produces an empty file** — Ctrl-C before the first
+  frame cannot finalize a valid recording. Wait at least a second.
+- **No audio in the output** — run `--list-audio-devices`, pass the right
+  `--microphone-device`/`--system-audio-device`, and confirm with `ffprobe`.
+
 ## Known limitations
 
 - Ctrl-C asks FFmpeg to finalize (`q` on stdin) and waits up to 10 seconds
   before killing it. A second Ctrl-C does not shorten that wait.
-- Verification checks that the file is non-empty and that `ffprobe` can read
-  a video stream with a positive duration. Frame-level integrity and playback
+- Verification checks that the file is non-empty, that a video/audio stream
+  exists, and that the duration is positive. Frame-level integrity and playback
   in a specific player are not verified.
-- Explicit regions are validated against the desktop rectangle before capture;
-  monitor-derived regions are in bounds by construction.
-- No audio capture yet.
+- Explicit regions are validated against the desktop rectangle; monitor-derived
+  regions are in bounds by construction.
+- Audio/video synchronization relies on FFmpeg timestamps; it is not measured.
+- Bluetooth profile switching is manual (documented, not automated).
+- Audio-only output is MP4/MKV only; `.m4a`/`.mp3` are not accepted yet.
 - Linux/X11 only. Wayland is unsupported and untested.
-- CI verifies formatting, compilation, lints, tests, and packaging. It cannot
-  verify that screen capture works on a real desktop; that needs a manual
-  smoke test (see CONTRIBUTING.md).
-- No released versions yet (v0.1.0 is planned after Phase 1).
+- Release artifacts are Linux x86_64 only and unsigned.
+- CI cannot verify real capture or audio; a manual smoke test is required
+  (see CONTRIBUTING.md).
 
 ## License
 
