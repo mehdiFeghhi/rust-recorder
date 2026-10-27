@@ -55,6 +55,12 @@ rust-recorder --list-monitors
 # List audio capture sources
 rust-recorder --list-audio-devices
 
+# Record with the default microphone
+rust-recorder --audio mic --output /tmp/mic.mp4
+
+# Record with a specific microphone
+rust-recorder --audio mic --microphone-device <ID> --output /tmp/mic.mp4
+
 # Record the first monitor
 rust-recorder --monitor 0 --output /tmp/monitor.mp4
 

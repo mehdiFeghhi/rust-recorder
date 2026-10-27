@@ -315,6 +315,114 @@ fn missing_pactl_is_reported() {
 }
 
 #[test]
+fn records_with_the_requested_microphone() {
+    let dir = TempDir::new("mic");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let args_file = dir.join("ffmpeg-args.txt");
+    let fake_ffmpeg = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nlast=\"\"\nfor argument in \"$@\"; do last=\"$argument\"; done\nprintf 'payload' > \"$last\"\nexit 0\n",
+        args_file.display()
+    );
+    write_script(dir.path(), "ffmpeg", &fake_ffmpeg);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio",
+            "mic",
+            "--microphone-device",
+            "alsa_input.pci-0000_00_1f.3.analog-stereo",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+
+    let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
+    let lines: Vec<&str> = argv.lines().collect();
+    let has = |flag: &str, value: &str| {
+        lines
+            .windows(2)
+            .any(|pair| pair[0] == flag && pair[1] == value)
+    };
+
+    assert!(has("-f", "pulse"), "argv: {argv}");
+    assert!(
+        has("-i", "alsa_input.pci-0000_00_1f.3.analog-stereo"),
+        "argv: {argv}"
+    );
+    assert!(has("-map", "1:a:0"), "argv: {argv}");
+}
+
+#[test]
+fn unknown_microphone_is_rejected() {
+    let dir = TempDir::new("mic-unknown");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio",
+            "mic",
+            "--microphone-device",
+            "missing_input",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("was not found"));
+}
+
+#[test]
+fn defaults_to_the_first_microphone() {
+    let dir = TempDir::new("mic-default");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let args_file = dir.join("ffmpeg-args.txt");
+    let fake_ffmpeg = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nlast=\"\"\nfor argument in \"$@\"; do last=\"$argument\"; done\nprintf 'payload' > \"$last\"\nexit 0\n",
+        args_file.display()
+    );
+    write_script(dir.path(), "ffmpeg", &fake_ffmpeg);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+
+    let output_path = dir.join("out.mp4");
+    let output = run(
+        dir.path(),
+        &[
+            "--audio",
+            "mic",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+            "--duration",
+            "1",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+
+    let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
+    let lines: Vec<&str> = argv.lines().collect();
+    assert!(
+        lines.windows(2).any(|pair| {
+            pair[0] == "-i" && pair[1] == "alsa_input.pci-0000_00_1f.3.analog-stereo"
+        }),
+        "argv: {argv}"
+    );
+}
+
+#[test]
 fn configuration_errors_exit_with_two() {
     let dir = TempDir::new("config");
     let output = run(dir.path(), &[]);

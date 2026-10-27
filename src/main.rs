@@ -66,6 +66,14 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
             Ok(())
         }
         ParseResult::Run(mut config) => {
+            if config.audio == audio::AudioMode::Microphone {
+                let sources = audio::discover()?;
+                let selected =
+                    audio::select_microphone(config.microphone_device.as_deref(), &sources)?;
+                tracing::info!(device = %selected.id, "using microphone");
+                config.microphone_device = Some(selected.id);
+            }
+
             // Monitor indices and explicit regions are resolved against the
             // live display list before the command is built.
             match config.capture {
@@ -151,6 +159,8 @@ OPTIONS:
         --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
         --list-monitors        List connected monitors and exit
         --list-audio-devices   List audio capture sources and exit
+        --audio <MODE>         Audio mode: none or mic [default: none]
+        --microphone-device <ID>  Microphone source ID from --list-audio-devices
         --monitor <N>          Capture the Nth monitor from --list-monitors
         --select-region        Select the region with the mouse, then record
     -h, --help                 Print this help

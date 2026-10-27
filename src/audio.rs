@@ -21,6 +21,43 @@ pub enum AudioSourceKind {
     SystemOutput,
 }
 
+/// Whether and how audio is recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AudioMode {
+    /// No audio (default); preserves the video-only behaviour.
+    #[default]
+    None,
+    /// One microphone source.
+    Microphone,
+    /// One output-monitor source (system audio).
+    System,
+    /// Microphone and system audio, mixed.
+    Both,
+}
+
+impl AudioMode {
+    /// Parse the CLI spelling.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "none" => Some(Self::None),
+            "mic" => Some(Self::Microphone),
+            "system" => Some(Self::System),
+            "both" => Some(Self::Both),
+            _ => None,
+        }
+    }
+
+    /// The CLI spelling, for error messages.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Microphone => "mic",
+            Self::System => "system",
+            Self::Both => "both",
+        }
+    }
+}
+
 /// One capture source with stable metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioSource {
@@ -38,6 +75,12 @@ pub enum AudioError {
     Spawn { source: io::Error },
     /// `pactl` ran but reported failure.
     Failed { status: ExitStatus, stderr: String },
+    /// The requested microphone id does not exist.
+    UnknownDevice { requested: String },
+    /// The requested id exists but is an output monitor, not a microphone.
+    NotAMicrophone { requested: String },
+    /// No microphone sources are available.
+    NoMicrophone,
 }
 
 impl AudioError {
@@ -63,6 +106,16 @@ impl fmt::Display for AudioError {
                     write!(f, "pactl failed ({code}): {stderr}")
                 }
             }
+            Self::UnknownDevice { requested } => write!(
+                f,
+                "microphone {requested:?} was not found; run --list-audio-devices"
+            ),
+            Self::NotAMicrophone { requested } => {
+                write!(f, "{requested:?} is an output monitor, not a microphone")
+            }
+            Self::NoMicrophone => {
+                write!(f, "no microphone sources found; run --list-audio-devices")
+            }
         }
     }
 }
@@ -71,7 +124,10 @@ impl Error for AudioError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Spawn { source } => Some(source),
-            Self::Failed { .. } => None,
+            Self::Failed { .. }
+            | Self::UnknownDevice { .. }
+            | Self::NotAMicrophone { .. }
+            | Self::NoMicrophone => None,
         }
     }
 }
@@ -144,6 +200,35 @@ fn build(id: String, description: Option<String>) -> AudioSource {
     }
 }
 
+/// Choose the microphone to record: the requested id, or the first one.
+pub fn select_microphone(
+    requested: Option<&str>,
+    sources: &[AudioSource],
+) -> Result<AudioSource, AudioError> {
+    if let Some(id) = requested {
+        let source = sources
+            .iter()
+            .find(|source| source.id == id)
+            .ok_or_else(|| AudioError::UnknownDevice {
+                requested: id.to_owned(),
+            })?;
+
+        if source.kind != AudioSourceKind::Microphone {
+            return Err(AudioError::NotAMicrophone {
+                requested: id.to_owned(),
+            });
+        }
+
+        return Ok(source.clone());
+    }
+
+    sources
+        .iter()
+        .find(|source| source.kind == AudioSourceKind::Microphone)
+        .cloned()
+        .ok_or(AudioError::NoMicrophone)
+}
+
 /// Render the table printed by `--list-audio-devices`.
 pub fn render(sources: &[AudioSource]) -> String {
     let mut output = String::from("Audio sources:\n");
@@ -169,6 +254,59 @@ mod tests {
     use super::*;
 
     const SAMPLE: &str = "\nSource #49\n\tState: SUSPENDED\n\tName: alsa_output.pci-0000_00_1f.3.analog-stereo.monitor\n\tDescription: Monitor of Built-in Audio Analog Stereo\n\tDriver: PipeWire\nSource #50\n\tState: SUSPENDED\n\tName: alsa_input.pci-0000_00_1f.3.analog-stereo\n\tDescription: Built-in Audio Analog Stereo\n\tDriver: PipeWire\n";
+
+    #[test]
+    fn parses_audio_modes() {
+        assert_eq!(AudioMode::parse("none"), Some(AudioMode::None));
+        assert_eq!(AudioMode::parse("mic"), Some(AudioMode::Microphone));
+        assert_eq!(AudioMode::parse("system"), Some(AudioMode::System));
+        assert_eq!(AudioMode::parse("both"), Some(AudioMode::Both));
+        assert_eq!(AudioMode::parse("stereo"), None);
+        assert_eq!(AudioMode::default(), AudioMode::None);
+    }
+
+    #[test]
+    fn selects_the_requested_microphone() {
+        let sources = parse(SAMPLE);
+        let selected =
+            select_microphone(Some("alsa_input.pci-0000_00_1f.3.analog-stereo"), &sources)
+                .expect("known microphone");
+
+        assert_eq!(selected.kind, AudioSourceKind::Microphone);
+    }
+
+    #[test]
+    fn defaults_to_the_first_microphone() {
+        let sources = parse(SAMPLE);
+        let selected = select_microphone(None, &sources).expect("default microphone");
+
+        assert_eq!(selected.id, "alsa_input.pci-0000_00_1f.3.analog-stereo");
+    }
+
+    #[test]
+    fn rejects_unknown_or_monitor_devices() {
+        let sources = parse(SAMPLE);
+
+        assert!(matches!(
+            select_microphone(Some("missing"), &sources),
+            Err(AudioError::UnknownDevice { .. })
+        ));
+
+        let monitor = "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor";
+        assert!(matches!(
+            select_microphone(Some(monitor), &sources),
+            Err(AudioError::NotAMicrophone { .. })
+        ));
+    }
+
+    #[test]
+    fn reports_when_no_microphone_exists() {
+        let monitor_only = "Source #1\n\tName: sink.monitor\n";
+        assert!(matches!(
+            select_microphone(None, &parse(monitor_only)),
+            Err(AudioError::NoMicrophone)
+        ));
+    }
 
     #[test]
     fn parses_and_classifies_sources() {

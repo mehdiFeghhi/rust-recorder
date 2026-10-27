@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Microphone recording: `--audio mic` records the default microphone, and
+  `--microphone-device <ID>` selects one from `--list-audio-devices`.
 - Audio source discovery: `--list-audio-devices` reports PulseAudio-compatible
   sources and classifies microphones versus output monitors.
 - Interactive selection: `--select-region` uses FFmpeg `x11grab`'s pointer
