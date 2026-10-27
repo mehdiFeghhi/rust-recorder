@@ -52,6 +52,9 @@ rust-recorder --output /tmp/demo.mp4 --duration 10
 # List connected monitors
 rust-recorder --list-monitors
 
+# List audio capture sources
+rust-recorder --list-audio-devices
+
 # Record the first monitor
 rust-recorder --monitor 0 --output /tmp/monitor.mp4
 
@@ -106,6 +109,7 @@ cargo install cargo-deny --locked   # or: cargo binstall cargo-deny
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 - [CHANGELOG.md](CHANGELOG.md) — notable changes
 - [docs/observability.md](docs/observability.md) — logging and diagnostics policy
+- [docs/audio.md](docs/audio.md) — audio subsystem design
 - [AGENTS.md](AGENTS.md) — instructions for AI coding agents
 
 ## Known limitations

@@ -7,6 +7,7 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::audio::AudioError;
 use crate::capture::CaptureError;
 use crate::config::ConfigError;
 use crate::monitor::MonitorError;
@@ -23,6 +24,7 @@ pub enum AppError {
     Probe(ProbeError),
     Monitor(MonitorError),
     Capture(CaptureError),
+    Audio(AudioError),
 }
 
 impl AppError {
@@ -35,6 +37,7 @@ impl AppError {
             Self::Probe(_) => ProbeError::EXIT_CODE,
             Self::Monitor(_) => MonitorError::EXIT_CODE,
             Self::Capture(_) => CaptureError::EXIT_CODE,
+            Self::Audio(_) => AudioError::EXIT_CODE,
         }
     }
 }
@@ -75,6 +78,12 @@ impl From<CaptureError> for AppError {
     }
 }
 
+impl From<AudioError> for AppError {
+    fn from(error: AudioError) -> Self {
+        Self::Audio(error)
+    }
+}
+
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -84,6 +93,7 @@ impl fmt::Display for AppError {
             Self::Probe(error) => write!(f, "{error}"),
             Self::Monitor(error) => write!(f, "{error}"),
             Self::Capture(error) => write!(f, "{error}"),
+            Self::Audio(error) => write!(f, "{error}"),
         }
     }
 }
@@ -97,6 +107,7 @@ impl Error for AppError {
             Self::Probe(error) => Some(error as &(dyn Error + 'static)),
             Self::Monitor(error) => Some(error as &(dyn Error + 'static)),
             Self::Capture(error) => Some(error as &(dyn Error + 'static)),
+            Self::Audio(error) => Some(error as &(dyn Error + 'static)),
         }
     }
 }
@@ -118,6 +129,14 @@ mod tests {
     fn process_errors_exit_with_one() {
         let error = AppError::from(ProcessError::ShutdownTimeout {
             grace: Duration::from_secs(1),
+        });
+        assert_eq!(error.exit_code(), 1);
+    }
+
+    #[test]
+    fn audio_errors_exit_with_one() {
+        let error = AppError::from(AudioError::Spawn {
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "no pactl"),
         });
         assert_eq!(error.exit_code(), 1);
     }

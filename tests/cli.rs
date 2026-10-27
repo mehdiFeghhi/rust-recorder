@@ -52,6 +52,18 @@ echo 'probe-boom' >&2
 exit 1
 "#;
 
+const PACTL_OUTPUT: &str = r#"#!/bin/sh
+printf '%s\n' \
+ 'Source #49' \
+ '    State: SUSPENDED' \
+ '    Name: alsa_output.pci-0000_00_1f.3.analog-stereo.monitor' \
+ '    Description: Monitor of Built-in Audio Analog Stereo' \
+ 'Source #50' \
+ '    State: SUSPENDED' \
+ '    Name: alsa_input.pci-0000_00_1f.3.analog-stereo' \
+ '    Description: Built-in Audio Analog Stereo'
+"#;
+
 const XRANDR_OUTPUT: &str = r#"#!/bin/sh
 printf '%s\n' \
  'Screen 0: minimum 320 x 200, current 1920 x 1200, maximum 16384 x 16384' \
@@ -270,6 +282,36 @@ fn interactive_selection_passes_the_flag() {
     let argv = fs::read_to_string(&args_file).expect("read fake ffmpeg argv");
     assert!(argv.contains("-select_region\n1\n"), "argv: {argv}");
     assert!(!argv.contains("-video_size"), "argv: {argv}");
+}
+
+#[test]
+fn lists_audio_devices() {
+    let dir = TempDir::new("audio-devices");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+
+    let output = run(dir.path(), &["--list-audio-devices"]);
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Monitor of Built-in Audio Analog Stereo"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("Type: system audio"), "stdout: {stdout}");
+    assert!(stdout.contains("Type: microphone"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("alsa_input.pci-0000_00_1f.3.analog-stereo"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn missing_pactl_is_reported() {
+    let dir = TempDir::new("no-pactl");
+    let output = run(dir.path(), &["--list-audio-devices"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("could not start pactl"));
 }
 
 #[test]

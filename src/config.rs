@@ -68,6 +68,7 @@ pub enum ParseResult {
     Help,
     Version,
     ListMonitors,
+    ListAudioDevices,
     Run(Config),
 }
 
@@ -157,6 +158,7 @@ impl Config {
                 "-V" | "--version" => return Ok(ParseResult::Version),
                 "--select-region" => select_region = true,
                 "--list-monitors" => return Ok(ParseResult::ListMonitors),
+                "--list-audio-devices" => return Ok(ParseResult::ListAudioDevices),
                 "-o" | "--output" => {
                     output = Some(PathBuf::from(next_value(&mut args, "--output")?));
                 }
@@ -382,6 +384,7 @@ mod tests {
             ParseResult::Help => panic!("expected a configuration, got help"),
             ParseResult::Version => panic!("expected a configuration, got version"),
             ParseResult::ListMonitors => panic!("expected a configuration, got monitor list"),
+            ParseResult::ListAudioDevices => panic!("expected a configuration, got audio list"),
         }
     }
 
@@ -392,6 +395,14 @@ mod tests {
             ParseResult::Help
         );
         assert_eq!(parse(&["-h"]).unwrap(), ParseResult::Help);
+    }
+
+    #[test]
+    fn list_audio_devices_is_recognized() {
+        assert_eq!(
+            parse(&["--list-audio-devices"]).unwrap(),
+            ParseResult::ListAudioDevices
+        );
     }
 
     #[test]

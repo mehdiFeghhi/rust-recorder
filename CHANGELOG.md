@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Audio source discovery: `--list-audio-devices` reports PulseAudio-compatible
+  sources and classifies microphones versus output monitors.
 - Interactive selection: `--select-region` uses FFmpeg `x11grab`'s pointer
   selection, so no GUI code is needed.
 - Region bounds validation: an explicit `--region` must fit within the
