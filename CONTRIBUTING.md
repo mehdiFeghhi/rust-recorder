@@ -20,6 +20,15 @@ cargo build
 cargo test
 ```
 
+System packages (Debian/Ubuntu/Pop!_OS):
+
+```bash
+sudo apt install ffmpeg x11-xserver-utils pulseaudio-utils
+```
+
+`xrandr` is needed for monitor discovery and region validation; `pactl` for
+audio discovery. PipeWire users get `pactl` through `pipewire-pulse`.
+
 ## Branch naming
 
 Format: `<type>/<short-kebab-case-description>`, where `<type>` is one of the
