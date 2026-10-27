@@ -13,9 +13,11 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
+use std::thread::sleep;
+use std::time::Duration;
 
 /// Serialises tests: writing an executable while another test forks can make
 /// `exec` fail with ETXTBSY. These tests are fast, so running them one at a
@@ -79,6 +81,16 @@ printf '%s\n' \
  '    State: SUSPENDED' \
  '    Name: alsa_input.pci-0000_00_1f.3.analog-stereo' \
  '    Description: Built-in Audio Analog Stereo'
+"#;
+
+const FFMPEG_WAITS_FOR_QUIT: &str = r#"#!/bin/sh
+last=""
+for argument in "$@"; do last="$argument"; done
+printf 'payload' > "$last"
+while IFS= read -r line; do
+  [ "$line" = "q" ] && break
+done
+exit 0
 "#;
 
 const XRANDR_OUTPUT: &str = r#"#!/bin/sh
@@ -588,6 +600,50 @@ fn records_audio_only() {
     let message = stderr(&output);
     assert!(message.contains("aac 48 kHz stereo"), "stderr: {message}");
     assert!(!message.contains("1920x1200"), "stderr: {message}");
+}
+
+#[cfg(unix)]
+#[test]
+fn interrupt_finalizes_a_two_input_recording() {
+    let dir = TempDir::new("interrupt");
+    write_script(dir.path(), "pactl", PACTL_OUTPUT);
+    write_script(dir.path(), "ffmpeg", FFMPEG_WAITS_FOR_QUIT);
+    write_script(dir.path(), "ffprobe", FFPROBE_SUCCEEDS);
+    let output_path = dir.join("out.mp4");
+
+    let child = Command::new(BIN)
+        .args([
+            "--audio",
+            "both",
+            "--output",
+            output_path.to_str().expect("utf-8 path"),
+        ])
+        .env("PATH", dir.path())
+        .env_remove("RUST_LOG")
+        .env("DISPLAY", ":1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn rust-recorder");
+
+    sleep(Duration::from_millis(1000));
+
+    let signal = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("send SIGINT");
+    assert!(signal.success(), "kill -INT failed");
+
+    let output = child.wait_with_output().expect("wait for rust-recorder");
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    assert!(
+        stderr(&output).contains("recording finished"),
+        "stderr: {}",
+        stderr(&output)
+    );
+    let recorded = fs::read(&output_path).expect("read recording");
+    assert!(!recorded.is_empty());
 }
 
 #[test]

@@ -19,6 +19,11 @@ pub const FFMPEG_PROGRAM: &str = "ffmpeg";
 /// preset, which keeps 1080p30 capture affordable on a laptop CPU.
 pub const X264_PRESET: &str = "veryfast";
 
+/// PulseAudio fragment size. FFmpeg's default buffering can delay the first
+/// frame and finalization by several seconds; 1024 frames starts recording in
+/// about a second without truncating audio.
+pub const PULSE_FRAGMENT_SIZE: u32 = 1024;
+
 /// Build the FFmpeg invocation for `config`.
 ///
 /// This only describes the process; [`crate::process::run`] executes it.
@@ -76,7 +81,13 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
     }
 
     for device in &audio_devices {
-        command.arg("-f").arg("pulse").arg("-i").arg(device);
+        command
+            .arg("-f")
+            .arg("pulse")
+            .arg("-fragment_size")
+            .arg(PULSE_FRAGMENT_SIZE.to_string())
+            .arg("-i")
+            .arg(device);
     }
 
     if !config.audio_only {
@@ -310,6 +321,7 @@ mod tests {
         assert!(!args.iter().any(|arg| arg == "x11grab"));
         assert!(!args.iter().any(|arg| arg == "-c:v"));
         assert_has_pair(&args, "-f", "pulse");
+        assert_has_pair(&args, "-fragment_size", "1024");
         assert_has_pair(&args, "-i", "mic.input");
         assert_has_pair(&args, "-map", "0:a:0");
     }
