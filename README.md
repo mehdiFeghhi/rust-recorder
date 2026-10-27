@@ -52,6 +52,9 @@ rust-recorder --output /tmp/demo.mp4 --duration 10
 # List connected monitors
 rust-recorder --list-monitors
 
+# List audio capture sources
+rust-recorder --list-audio-devices
+
 # Record the first monitor
 rust-recorder --monitor 0 --output /tmp/monitor.mp4
 

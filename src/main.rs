@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+mod audio;
 mod capture;
 mod command;
 mod config;
@@ -44,6 +45,15 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
         }
         ParseResult::Version => {
             println!("rust-recorder {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        ParseResult::ListAudioDevices => {
+            let sources = audio::discover()?;
+            if sources.is_empty() {
+                eprintln!("No audio capture sources found.");
+            } else {
+                print!("{}", audio::render(&sources));
+            }
             Ok(())
         }
         ParseResult::ListMonitors => {
@@ -140,6 +150,7 @@ OPTIONS:
         --display <:N>         X11 display [default: $DISPLAY]
         --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
         --list-monitors        List connected monitors and exit
+        --list-audio-devices   List audio capture sources and exit
         --monitor <N>          Capture the Nth monitor from --list-monitors
         --select-region        Select the region with the mouse, then record
     -h, --help                 Print this help
