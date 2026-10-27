@@ -8,6 +8,7 @@
 
 use std::process::Command;
 
+use crate::audio::AudioMode;
 use crate::capture::Capture;
 use crate::config::{Config, ConfigError, Container};
 
@@ -70,6 +71,14 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         }
     }
 
+    if config.audio == AudioMode::Microphone {
+        let device = config
+            .microphone_device
+            .as_deref()
+            .ok_or(ConfigError::MissingAudioDevice)?;
+        command.arg("-f").arg("pulse").arg("-i").arg(device);
+    }
+
     command
         // Output: H.264 that plays everywhere, in the selected container.
         .arg("-c:v")
@@ -80,6 +89,22 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         .arg("yuv420p")
         .arg("-f")
         .arg(container.ffmpeg_format());
+
+    if config.audio == AudioMode::Microphone {
+        command
+            .arg("-map")
+            .arg("0:v:0")
+            .arg("-map")
+            .arg("1:a:0")
+            .arg("-c:a")
+            .arg("aac")
+            .arg("-b:a")
+            .arg("192k")
+            .arg("-ar")
+            .arg("48000")
+            .arg("-ac")
+            .arg("2");
+    }
 
     if let Some(duration) = config.duration {
         command.arg("-t").arg(duration.to_string());
@@ -105,6 +130,8 @@ mod tests {
             duration: None,
             display: ":1".to_owned(),
             capture: Capture::FullScreen,
+            audio: AudioMode::None,
+            microphone_device: None,
         }
     }
 
@@ -188,6 +215,38 @@ mod tests {
     fn extension_matching_is_case_insensitive() {
         let args = args(&command_for(&config("clip.MP4")));
         assert_has_pair(&args, "-f", "mp4");
+    }
+
+    #[test]
+    fn microphone_adds_a_pulse_input_and_mapping() {
+        let mut cfg = config("clip.mp4");
+        cfg.audio = AudioMode::Microphone;
+        cfg.microphone_device = Some("alsa_input.test".to_owned());
+        let args = args(&command_for(&cfg));
+
+        assert_has_pair(&args, "-f", "pulse");
+        assert_has_pair(&args, "-i", "alsa_input.test");
+        assert_has_pair(&args, "-map", "0:v:0");
+        assert_has_pair(&args, "-map", "1:a:0");
+        assert_has_pair(&args, "-c:a", "aac");
+    }
+
+    #[test]
+    fn video_only_recording_has_no_audio_argument() {
+        let args = args(&command_for(&config("clip.mp4")));
+
+        assert!(!args.iter().any(|arg| arg == "pulse"));
+        assert!(!args.iter().any(|arg| arg == "-map"));
+        assert!(!args.iter().any(|arg| arg == "-c:a"));
+    }
+
+    #[test]
+    fn unresolved_microphone_is_rejected() {
+        let mut cfg = config("clip.mp4");
+        cfg.audio = AudioMode::Microphone;
+
+        let error = build(&cfg).expect_err("microphone must be resolved first");
+        assert_eq!(error, ConfigError::MissingAudioDevice);
     }
 
     #[test]

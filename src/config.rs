@@ -11,6 +11,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::audio::AudioMode;
 use crate::capture::{Capture, CaptureError, Region};
 
 /// Frame rate used when `--fps` is omitted.
@@ -30,6 +31,8 @@ pub struct Config {
     pub duration: Option<u64>,
     pub display: String,
     pub capture: Capture,
+    pub audio: AudioMode,
+    pub microphone_device: Option<String>,
 }
 
 /// Output container selected from the validated output extension.
@@ -92,6 +95,10 @@ pub enum ConfigError {
     InvalidMonitor(String),
     ConflictingCapture,
     MonitorNotResolved(u32),
+    InvalidAudioMode(String),
+    UnsupportedAudioMode(AudioMode),
+    AudioDeviceWithoutMode,
+    MissingAudioDevice,
 }
 
 impl ConfigError {
@@ -127,6 +134,8 @@ impl Config {
         let mut region: Option<Region> = None;
         let mut monitor: Option<u32> = None;
         let mut select_region = false;
+        let mut audio = AudioMode::None;
+        let mut microphone_device: Option<String> = None;
         let mut args = args.into_iter();
 
         while let Some(arg) = args.next() {
@@ -157,6 +166,21 @@ impl Config {
                 }
                 "-V" | "--version" => return Ok(ParseResult::Version),
                 "--select-region" => select_region = true,
+                "--audio" => {
+                    let raw = next_value(&mut args, "--audio")?;
+                    let text = raw.to_str().ok_or_else(|| {
+                        ConfigError::InvalidAudioMode(raw.to_string_lossy().into_owned())
+                    })?;
+                    audio = AudioMode::parse(text)
+                        .ok_or_else(|| ConfigError::InvalidAudioMode(text.to_owned()))?;
+                }
+                "--microphone-device" => {
+                    let raw = next_value(&mut args, "--microphone-device")?;
+                    let text = raw.to_str().ok_or_else(|| {
+                        ConfigError::InvalidAudioMode(raw.to_string_lossy().into_owned())
+                    })?;
+                    microphone_device = Some(text.to_owned());
+                }
                 "--list-monitors" => return Ok(ParseResult::ListMonitors),
                 "--list-audio-devices" => return Ok(ParseResult::ListAudioDevices),
                 "-o" | "--output" => {
@@ -215,6 +239,8 @@ impl Config {
             duration,
             display,
             capture,
+            audio,
+            microphone_device,
         };
         config.validate()?;
         Ok(ParseResult::Run(config))
@@ -234,6 +260,17 @@ impl Config {
                 return Err(ConfigError::InvalidDuration(duration.to_string()));
             }
             _ => {}
+        }
+
+        match self.audio {
+            AudioMode::System | AudioMode::Both => {
+                return Err(ConfigError::UnsupportedAudioMode(self.audio));
+            }
+            AudioMode::None | AudioMode::Microphone => {}
+        }
+
+        if self.microphone_device.is_some() && self.audio != AudioMode::Microphone {
+            return Err(ConfigError::AudioDeviceWithoutMode);
         }
 
         validate_display(&self.display)?;
@@ -331,6 +368,22 @@ impl fmt::Display for ConfigError {
             Self::MonitorNotResolved(index) => write!(
                 f,
                 "internal error: monitor {index} was not resolved before command construction"
+            ),
+            Self::InvalidAudioMode(value) => write!(
+                f,
+                "invalid --audio {value:?}: expected none, mic, system, or both"
+            ),
+            Self::UnsupportedAudioMode(mode) => write!(
+                f,
+                "audio mode {} is not implemented yet; use none or mic",
+                mode.label()
+            ),
+            Self::AudioDeviceWithoutMode => {
+                write!(f, "--microphone-device requires --audio mic")
+            }
+            Self::MissingAudioDevice => write!(
+                f,
+                "internal error: microphone device was not resolved before command construction"
             ),
         }
     }
@@ -646,6 +699,46 @@ mod tests {
             args.extend(extra);
             assert_eq!(parse(&args).unwrap_err(), ConfigError::ConflictingCapture);
         }
+    }
+
+    #[test]
+    fn microphone_mode_is_parsed() {
+        let dir = temp_dir("audio-mic");
+        let output = dir.join("out.mp4");
+        let config = config(&[
+            "--output",
+            output.to_str().unwrap(),
+            "--audio",
+            "mic",
+            "--microphone-device",
+            "alsa_input.test",
+        ]);
+
+        assert_eq!(config.audio, AudioMode::Microphone);
+        assert_eq!(config.microphone_device.as_deref(), Some("alsa_input.test"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn invalid_or_unsupported_audio_modes_are_rejected() {
+        assert_eq!(
+            parse(&["--output", "out.mp4", "--audio", "stereo"]).unwrap_err(),
+            ConfigError::InvalidAudioMode("stereo".to_owned())
+        );
+
+        assert_eq!(
+            parse(&["--output", "out.mp4", "--audio", "system"]).unwrap_err(),
+            ConfigError::UnsupportedAudioMode(AudioMode::System)
+        );
+    }
+
+    #[test]
+    fn microphone_device_requires_microphone_mode() {
+        assert_eq!(
+            parse(&["--output", "out.mp4", "--microphone-device", "x"]).unwrap_err(),
+            ConfigError::AudioDeviceWithoutMode
+        );
     }
 
     #[test]
