@@ -83,7 +83,23 @@ fn run(args: impl Iterator<Item = OsString>) -> Result<(), AppError> {
                     tracing::info!(device = %selected.id, "using system audio");
                     config.system_audio_device = Some(selected.id);
                 }
-                audio::AudioMode::None | audio::AudioMode::Both => {}
+                audio::AudioMode::Both => {
+                    let sources = audio::discover()?;
+                    let microphone =
+                        audio::select_microphone(config.microphone_device.as_deref(), &sources)?;
+                    let system = audio::select_system_output(
+                        config.system_audio_device.as_deref(),
+                        &sources,
+                    )?;
+                    tracing::info!(
+                        microphone = %microphone.id,
+                        system = %system.id,
+                        "using microphone and system audio"
+                    );
+                    config.microphone_device = Some(microphone.id);
+                    config.system_audio_device = Some(system.id);
+                }
+                audio::AudioMode::None => {}
             }
 
             // Monitor indices and explicit regions are resolved against the
@@ -181,7 +197,7 @@ OPTIONS:
         --region <WxH+X+Y>     Capture a rectangle, e.g. 1280x720+100+80
         --list-monitors        List connected monitors and exit
         --list-audio-devices   List audio capture sources and exit
-        --audio <MODE>         Audio mode: none, mic, or system [default: none]
+        --audio <MODE>         Audio mode: none, mic, system, or both [default: none]
         --microphone-device <ID>  Microphone source ID from --list-audio-devices
         --system-audio-device <ID>  Output-monitor source ID from --list-audio-devices
         --monitor <N>          Capture the Nth monitor from --list-monitors

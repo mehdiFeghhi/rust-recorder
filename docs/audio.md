@@ -173,6 +173,29 @@ Containers:
 | Microphone permission denied | Surface FFmpeg/PulseAudio stderr |
 | Duplicate mic/monitor ID | Allowed but worth a warning; mixed with itself is rarely intended |
 
+## Bluetooth headsets
+
+Many headsets default to the A2DP profile, which provides **output only**
+(`sinks: 1, sources: 0`). The tool then lists the output monitor but no
+microphone. Switch the card to an HFP profile to expose the headset mic:
+
+```bash
+pactl list short cards                          # find bluez_card.<MAC>
+pactl list cards | grep -A20 bluez_card         # see profiles
+pactl set-card-profile bluez_card.<MAC> headset-head-unit
+pactl list short sources                        # bluez_input.<MAC>.0 appears
+```
+
+HFP is mono (8/16 kHz), so playback quality drops and the output monitor also
+becomes mono while the profile is active. Restore A2DP afterwards:
+
+```bash
+pactl set-card-profile bluez_card.<MAC> a2dp-sink
+```
+
+Do not switch profiles automatically: it changes global audio routing for every
+application.
+
 ## Privacy
 
 - Never log audio samples or device content.

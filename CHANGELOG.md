@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/
 
 ### Added
 
+- Mixed audio: `--audio both` records microphone and system audio into one
+  AAC track with FFmpeg `amix`.
 - System-audio recording: `--audio system` captures an output-monitor source,
   selectable with `--system-audio-device <ID>`.
 - Audio-aware verification: when audio is enabled, `ffprobe` must find an audio

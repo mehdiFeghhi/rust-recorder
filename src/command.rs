@@ -71,7 +71,8 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         }
     }
 
-    if let Some(device) = audio_device(config)? {
+    let audio_devices = audio_devices(config)?;
+    for device in &audio_devices {
         command.arg("-f").arg("pulse").arg("-i").arg(device);
     }
 
@@ -86,12 +87,24 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
         .arg("-f")
         .arg(container.ffmpeg_format());
 
-    if config.audio != AudioMode::None {
+    match audio_devices.len() {
+        0 => {}
+        1 => {
+            command.arg("-map").arg("0:v:0").arg("-map").arg("1:a:0");
+        }
+        _ => {
+            command
+                .arg("-filter_complex")
+                .arg("[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0[a]")
+                .arg("-map")
+                .arg("0:v:0")
+                .arg("-map")
+                .arg("[a]");
+        }
+    }
+
+    if !audio_devices.is_empty() {
         command
-            .arg("-map")
-            .arg("0:v:0")
-            .arg("-map")
-            .arg("1:a:0")
             .arg("-c:a")
             .arg("aac")
             .arg("-b:a")
@@ -113,21 +126,32 @@ pub fn build(config: &Config) -> Result<Command, ConfigError> {
     Ok(command)
 }
 
-/// The resolved pulse source for the selected audio mode.
-fn audio_device(config: &Config) -> Result<Option<&str>, ConfigError> {
+/// The resolved pulse sources for the selected audio mode.
+fn audio_devices(config: &Config) -> Result<Vec<&str>, ConfigError> {
     match config.audio {
-        AudioMode::None => Ok(None),
-        AudioMode::Microphone => config
-            .microphone_device
-            .as_deref()
-            .map(Some)
-            .ok_or(ConfigError::MissingAudioDevice),
-        AudioMode::System => config
-            .system_audio_device
-            .as_deref()
-            .map(Some)
-            .ok_or(ConfigError::MissingSystemAudioDevice),
-        AudioMode::Both => Err(ConfigError::UnsupportedAudioMode(AudioMode::Both)),
+        AudioMode::None => Ok(Vec::new()),
+        AudioMode::Microphone => Ok(vec![
+            config
+                .microphone_device
+                .as_deref()
+                .ok_or(ConfigError::MissingAudioDevice)?,
+        ]),
+        AudioMode::System => Ok(vec![
+            config
+                .system_audio_device
+                .as_deref()
+                .ok_or(ConfigError::MissingSystemAudioDevice)?,
+        ]),
+        AudioMode::Both => Ok(vec![
+            config
+                .microphone_device
+                .as_deref()
+                .ok_or(ConfigError::MissingAudioDevice)?,
+            config
+                .system_audio_device
+                .as_deref()
+                .ok_or(ConfigError::MissingSystemAudioDevice)?,
+        ]),
     }
 }
 
@@ -256,6 +280,25 @@ mod tests {
         assert_has_pair(&args, "-f", "pulse");
         assert_has_pair(&args, "-i", "sink.monitor");
         assert_has_pair(&args, "-map", "1:a:0");
+    }
+
+    #[test]
+    fn both_modes_mix_two_inputs() {
+        let mut cfg = config("clip.mp4");
+        cfg.audio = AudioMode::Both;
+        cfg.microphone_device = Some("mic.input".to_owned());
+        cfg.system_audio_device = Some("sink.monitor".to_owned());
+        let args = args(&command_for(&cfg));
+
+        assert_has_pair(&args, "-i", "mic.input");
+        assert_has_pair(&args, "-i", "sink.monitor");
+        assert!(
+            args.iter()
+                .any(|arg| arg.contains("amix=inputs=2") && arg.contains("[1:a][2:a]")),
+            "argv: {args:?}"
+        );
+        assert_has_pair(&args, "-map", "[a]");
+        assert_eq!(args.iter().filter(|arg| *arg == "pulse").count(), 2);
     }
 
     #[test]

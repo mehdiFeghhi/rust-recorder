@@ -97,7 +97,6 @@ pub enum ConfigError {
     ConflictingCapture,
     MonitorNotResolved(u32),
     InvalidAudioMode(String),
-    UnsupportedAudioMode(AudioMode),
     AudioDeviceWithoutMode,
     SystemDeviceWithoutMode,
     MissingAudioDevice,
@@ -274,15 +273,15 @@ impl Config {
             _ => {}
         }
 
-        if self.audio == AudioMode::Both {
-            return Err(ConfigError::UnsupportedAudioMode(AudioMode::Both));
-        }
-
-        if self.microphone_device.is_some() && self.audio != AudioMode::Microphone {
+        if self.microphone_device.is_some()
+            && !matches!(self.audio, AudioMode::Microphone | AudioMode::Both)
+        {
             return Err(ConfigError::AudioDeviceWithoutMode);
         }
 
-        if self.system_audio_device.is_some() && self.audio != AudioMode::System {
+        if self.system_audio_device.is_some()
+            && !matches!(self.audio, AudioMode::System | AudioMode::Both)
+        {
             return Err(ConfigError::SystemDeviceWithoutMode);
         }
 
@@ -386,16 +385,11 @@ impl fmt::Display for ConfigError {
                 f,
                 "invalid --audio {value:?}: expected none, mic, system, or both"
             ),
-            Self::UnsupportedAudioMode(mode) => write!(
-                f,
-                "audio mode {} is not implemented yet; use none, mic, or system",
-                mode.label()
-            ),
             Self::AudioDeviceWithoutMode => {
-                write!(f, "--microphone-device requires --audio mic")
+                write!(f, "--microphone-device requires --audio mic or both")
             }
             Self::SystemDeviceWithoutMode => {
-                write!(f, "--system-audio-device requires --audio system")
+                write!(f, "--system-audio-device requires --audio system or both")
             }
             Self::MissingSystemAudioDevice => write!(
                 f,
@@ -781,11 +775,25 @@ mod tests {
     }
 
     #[test]
-    fn both_mode_is_not_implemented() {
-        assert_eq!(
-            parse(&["--output", "out.mp4", "--audio", "both"]).unwrap_err(),
-            ConfigError::UnsupportedAudioMode(AudioMode::Both)
-        );
+    fn both_mode_accepts_two_devices() {
+        let dir = temp_dir("audio-both");
+        let output = dir.join("out.mp4");
+        let config = config(&[
+            "--output",
+            output.to_str().unwrap(),
+            "--audio",
+            "both",
+            "--microphone-device",
+            "mic.input",
+            "--system-audio-device",
+            "sink.monitor",
+        ]);
+
+        assert_eq!(config.audio, AudioMode::Both);
+        assert_eq!(config.microphone_device.as_deref(), Some("mic.input"));
+        assert_eq!(config.system_audio_device.as_deref(), Some("sink.monitor"));
+
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
